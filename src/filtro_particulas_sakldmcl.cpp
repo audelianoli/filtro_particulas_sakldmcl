@@ -12,6 +12,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 
 	initial_pose_pub_ = n.advertise<geometry_msgs::Pose2D>("filterparticlepose", 1, true);
 	particle_cloud_pub_ = n.advertise<geometry_msgs::PoseArray>("particlecloudAU", 2, true);
+	particle_curr_pose_pub_ = n.advertise<geometry_msgs::PoseArray>("particle_curr_pose", 2, true);
 
 //--------------------------------------------------------------------------------//
 	freq_ = 20.0;
@@ -29,7 +30,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 	//map_position_x_ = 0;
 	//map_position_y_ = 0;
 	//cout<<"map resolution: "<<res_<<endl;
-	range_max_fakelaser = 5.6; //[m]
+	range_max_fakelaser = 10; //5.6; //[m]
 	//laser_noise_ = qtdd_laser_;
 
 	//noise_level = (desvio_padrao / max_range) * 100% || max_range * erro_desejado
@@ -136,6 +137,7 @@ Filtro_Particulas_Sakldmcl::~Filtro_Particulas_Sakldmcl()
 	map_meta_data_sub_.shutdown();
 	initial_pose_pub_.shutdown();
 	particle_cloud_pub_.shutdown();
+	particle_curr_pose_pub_.shutdown();
 }
 
 void Filtro_Particulas_Sakldmcl::mapCallback(const nav_msgs::MapMetaDataConstPtr& msg)
@@ -312,7 +314,7 @@ void Filtro_Particulas_Sakldmcl::fakeLaser()
 		for(num_laser = 0 ; num_laser < qtdd_laser_ ; num_laser++)
 		{
 			passo = 0;
-			int iteracao = range_max_fakelaser / passo_base; // 5.6 / 0.06 = 112
+			int iteracao = 7.0 / passo_base; //range_max_fakelaser / passo_base; // 5.6 / 0.06 = 112
 
 			for(int p = 1; p <= iteracao; p++)
 			{
@@ -487,7 +489,8 @@ void Filtro_Particulas_Sakldmcl::moveParticles()
 	//cout<<"pose_anterior_.x: "<<pose_anterior_.x<<" ; pose_anterior_.y: "<<pose_anterior_.y<<" ; pose_anterior_.theta: "<<pose_anterior_.theta<<endl;
 
 	int p = 0;
-	if(delta_pose_.x != 0 || delta_pose_.y != 0 || delta_pose_.theta != 0){
+	if(delta_pose_.x != 0 || delta_pose_.y != 0 || delta_pose_.theta != 0)
+	{
 		//cout<<"deltas != 0"<<endl;
 
 		//cout<<"pose_x_: "<<pose_x_<<" ; pose_y_: "<<pose_y_<<" ; pose_theta_: "<<pose_theta_<<endl;
@@ -529,17 +532,18 @@ void Filtro_Particulas_Sakldmcl::moveParticles()
 		//cout<<"particle_pose["<<p<<"]:\n"<<particle_pose_[p-1]<<endl;
 		//cout<<"moveParticulas"<<endl;
 
-		cloud();
-		fakeLaser();
-		//cout<<"fakeLaser()"<<endl;
-		resample();
-		//cout<<"resample()"<<endl;
-		pubInicialPose();
-		//cout<<"pubinitialPose()"<<endl;
 
-		//cout<<endl;
+		cloud();
+
+		fakeLaser();
+
+		resample();
+
+		pubInicialPose();
 
 		calculoNumKBins();
+		//caso queira desabilitar o KLD
+		//k_bins_ = 0;
 		calculoSampleSize(k_bins_);
 
 	}
@@ -606,6 +610,10 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 		//usleep(250000);
 	}
 
+	initial_pose2_.x = xmedia;
+	initial_pose2_.y = ymedia;
+	initial_pose2_.theta = thetamedia;
+
 	if(sum < error_particles_)
 	{
 		//Para publicar o pose médio.
@@ -623,6 +631,7 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 
 void Filtro_Particulas_Sakldmcl::cloud()
 {
+	//publicar a nuvem de partículas
 	geometry_msgs::PoseArray cloud_msg;
     cloud_msg.header.stamp = ros::Time::now();
     cloud_msg.header.frame_id = "map";
@@ -633,6 +642,16 @@ void Filtro_Particulas_Sakldmcl::cloud()
 				tf::Vector3(particle_pose_[i].x + map_position_x_, particle_pose_[i].y + map_position_y_, 0)),cloud_msg.poses[i]);
 	}
 	particle_cloud_pub_.publish(cloud_msg);
+
+	//publicar o pose_atual
+	geometry_msgs::PoseArray pose_curr_msg;
+	pose_curr_msg.header.stamp = ros::Time::now();
+	pose_curr_msg.header.frame_id = "map";
+	pose_curr_msg.poses.resize(1);
+	tf::poseTFToMsg(tf::Pose(tf::createQuaternionFromYaw(initial_pose2_.theta),
+				tf::Vector3(initial_pose2_.x + map_position_x_, initial_pose2_.y + map_position_y_, 0)),pose_curr_msg.poses[0]);
+
+	particle_curr_pose_pub_.publish(pose_curr_msg);
 }
 
 void Filtro_Particulas_Sakldmcl::createGrids()
@@ -718,7 +737,7 @@ void Filtro_Particulas_Sakldmcl::createGrids()
 						}
 						else
 						{
-							//não achou o obstáculo ou ele está a mais de 5.6 metros de distância
+							//não achou o obstáculo ou ele está a mais de "range_max" metros de distância
 							fake_laser_data_[i][num_laser] = -999;
 							passo = -9999;
 						}
@@ -834,6 +853,7 @@ void Filtro_Particulas_Sakldmcl::merge (filtro_particulas_sakldmcl::grid_pose_en
 
 void Filtro_Particulas_Sakldmcl::calculoSER()
 {
+	//calcula a energia do robô no instante t dado os valores do laser
 	if(calculo_SER_ok_ == false)
 	{
 		calculo_SER_loop_ = false;
@@ -843,11 +863,15 @@ void Filtro_Particulas_Sakldmcl::calculoSER()
 		{
 			if(laser_data_[laser_num] > 0.0)
 			{
-				laser_data_energy_ += (1 - (laser_data_[laser_num] / max_laser_range_));
+				//laser_data_energy_ += (1 - (laser_data_[laser_num] / max_laser_range_));
+
+				laser_data_energy_ += (1 - (laser_data_[laser_num] / range_max_fakelaser));
 				//cout<<"laser_data_energy_: "<<laser_data_energy_<<endl;
 			}else
 			{
 				//ROS_INFO("Atencao: Movimente ou gire o robo ate que o laser nao poduza mais dados NAN e INF");
+				cout<<"Atencao: Movimente ou gire o robo ate que o laser nao poduza mais dados NAN e INF"<<endl;
+
 				//laser_num = qtdd_laser_;
 				//calculo_SER_loop_ = true;
 			}
@@ -864,6 +888,7 @@ void Filtro_Particulas_Sakldmcl::calculoSER()
 
 bool Filtro_Particulas_Sakldmcl::buscaEnergiaSER()
 {
+	//busca uma energia igual à achada no calculoSER() no grid_pose_energy e salva o numero de particulas com a mesma energia.
 	int esq, meio, dir;
 	esq = 0;
 	dir = size_grid_energy_ - 1;
@@ -897,6 +922,7 @@ bool Filtro_Particulas_Sakldmcl::buscaEnergiaSER()
 		if ( (laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) > ser_threshold_ ) esq = meio + 1;
 		else dir = meio - 1;
 	}
+	//cout<<"A buscaEnergiaSER não achou uma energia igual"<<endl;
 	return false;
 }
 
@@ -1105,54 +1131,54 @@ void Filtro_Particulas_Sakldmcl::spin()
 		usleep(500000);
 */
 
+		//verificando se o mapa foi carregado
 		if (free_ok_ == true && occ_ok_ == true)
-			//cout<<"free_ok: "<<free_ok_<<" | occ_ok: "<<occ_ok_<<" | grids_ok: "<<grids_ok_<<endl;
 		{
 			if(grids_ok_ == false)
 			{
-				ROS_INFO("Inicio do createGrids()");
+				//cria e ordena o grid do pose e energia
+				//é feito apenas uma vez (depois que carrega um mapa)
+
 				createGrids();
-				ROS_INFO("Fim do createGrids()");
 
+				//no início de tudo: num_part_ = max_part_
 				num_part_ = max_part_;
-
-				//cout<<"grids_ok: "<<grids_ok_<<endl;
 
 			}else if(grids_ok_ == true && odom_ok_ == true && laser_ok_ == true )
 			{
-
-				cout<<"max_w_: "<<max_w_<<endl;
+				//cout<<"max_w_: "<<max_w_<<endl;
 				if(max_w_ < weight_threshold_ && prim_converg_ == true)
 				{
+					cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
+					//se peso máximo for menor que threshold, divide o sample set e habilita o cálculo de SER (compara fake_laser e real laser)
 					num_part_local_ = alpha_sample_set_ * num_part_;
-					ROS_INFO("ESPALHANDO AS PARTICULAS (kidnapping)");
+					cout<<endl;
+					ROS_INFO("ESPALHANDO AS PARTICULAS (kidnapping)!!!!!");
 					calculo_SER_ok_ = false;
-				}
-				else
-					num_part_local_ = num_part_;
+				}else {num_part_local_ = num_part_;}
 
 				num_part_global_ = num_part_ - num_part_local_;
 
 				if(num_part_global_ != 0)
 				{
+					//habilita o espalhamento das partículas
 					//cout<<"P_Local_: "<<num_part_local_<<" | P_Global_: "<<num_part_global_<<" | P_Total: "<<num_part_<<endl;
 					create_particle_ok_ = 1;
 					//createParticles();
 				}
-
-
 				calculoSER();
 				if(calculo_SER_ok_ == true) buscaEnergiaSER();
-
+				//cout<<"Calculo_SER OK"<<endl;
 				if(buscaEnergiaSER() == true)
+					//cout<<"Busca SER OK"<<endl;
 				{
 					//ROS_INFO("Inicio do createParticles()");
 					if(create_particle_ok_ == 1)
 					{
 						bins_ = 8 - (res_/0.05); //12 - (2 * (res_/0.05)); //método empírico kkkk
 					}
+					if(zerar_deltas_ == false){num_part_local_ = 0;}
 					createParticles();
-					//ROS_INFO("Fim do createParticles()");
 
 					if(create_particle_ok_ == 0 && zerar_deltas_ == false){
 
@@ -1163,7 +1189,7 @@ void Filtro_Particulas_Sakldmcl::spin()
 
 						zerar_deltas_ = true;
 
-						moveParticles();
+						//moveParticles();
 						//cout<<"moveParticles()"<<endl;
 					}else if(create_particle_ok_ == 0 && zerar_deltas_ == true){
 							moveParticles();
