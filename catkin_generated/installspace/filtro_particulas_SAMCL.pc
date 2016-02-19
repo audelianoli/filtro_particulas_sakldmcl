@@ -1,0 +1,8 @@
+prefix=/home/au/catkin_ws/install
+
+Name: filtro_particulas_SAMCL
+Description: Description of filtro_particulas_SAMCL
+Version: 0.0.0
+Cflags: -I/home/au/catkin_ws/install/include
+Libs: -L/home/au/catkin_ws/install/lib 
+Requires: message_runtime

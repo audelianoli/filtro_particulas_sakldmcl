@@ -1,0 +1,9 @@
+<launch>
+
+	<node name="map_server" pkg="map_server" type="map_server" args="$(find filtro_particulas_sakldmcl)/mapas/0.10/map.yaml"/>
+	<node pkg="filtro_particulas_sakldmcl" type="filtro_particulas_sakldmcl" name="filtro_particulas_sakldmcl_node"/>
+	<node pkg="rviz" type="rviz" name="rviz" args="-d $(find filtro_particulas_sakldmcl)/rviz/filtro_particulas.rviz" />
+
+	<!--node pkg="rosaria_teleop" type="rosaria_teleop" name="rosaria_teleop" /-->
+		
+</launch>

@@ -1,0 +1,2 @@
+set(filtro_particulas_SAMCL_MESSAGE_FILES "/home/au/catkin_ws/src/filtro_particulas_SAMCL/msg/energia.msg;/home/au/catkin_ws/src/filtro_particulas_SAMCL/msg/pose.msg")
+set(filtro_particulas_SAMCL_SERVICE_FILES "")

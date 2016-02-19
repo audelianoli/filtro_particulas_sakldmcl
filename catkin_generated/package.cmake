@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "filtro_particulas_sakldmcl")
+set(filtro_particulas_sakldmcl_MAINTAINER "au <au@todo.todo>")
+set(filtro_particulas_sakldmcl_DEPRECATED "")
+set(filtro_particulas_sakldmcl_VERSION "0.0.0")
+set(filtro_particulas_sakldmcl_BUILD_DEPENDS "roscpp" "rospy" "std_msgs" "message_generation")
+set(filtro_particulas_sakldmcl_RUN_DEPENDS "roscpp" "rospy" "std_msgs" "message_runtime")
+set(filtro_particulas_sakldmcl_BUILDTOOL_DEPENDS "catkin")
