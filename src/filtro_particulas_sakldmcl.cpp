@@ -43,7 +43,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 
 	//parâmetros para SAMCL
 	ser_threshold_ = 0.035; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
-	weight_threshold_ = 0.0035; //0.0015 -> 0.10
+	weight_threshold_ = 0.0030; //0.0015 -> 0.10
 	alpha_sample_set_ = 0.2; //20% local e 80% global
 
 	//parâmetros para KLD
@@ -125,6 +125,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 	create_particle_ok_ = 1;
 	grids_ok_ = false;
 	calculo_SER_ok_ = false;
+	busca_energia_SER_ok_ = false;
 
 }
 
@@ -888,41 +889,45 @@ void Filtro_Particulas_Sakldmcl::calculoSER()
 
 bool Filtro_Particulas_Sakldmcl::buscaEnergiaSER()
 {
-	//busca uma energia igual à achada no calculoSER() no grid_pose_energy e salva o numero de particulas com a mesma energia.
-	int esq, meio, dir;
-	esq = 0;
-	dir = size_grid_energy_ - 1;
-	int t = 0;
+	if(busca_energia_SER_ok_ == false)
+	{
+		//busca uma energia igual à achada no calculoSER() no grid_pose_energy e salva o numero de particulas com a mesma energia.
+		int esq, meio, dir;
+		esq = 0;
+		dir = size_grid_energy_ - 1;
+		int t = 0;
 
-	while (esq <= dir){
-		//cout<<"esq: "<<esq<<" ; dir: "<<dir<<endl;
-
-		meio = (esq + dir) / 2;
-
-		while ( (laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) >= -ser_threshold_ && (laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) <= ser_threshold_)
+		while (esq <= dir)
 		{
-			//cout<<"laser_data_energy_: "<<laser_data_energy_<<" | grid_pose_energy_[grid_indice_sorted_[meio]].energy: "<<grid_pose_energy_[grid_indice_sorted_[meio]].energy<<endl;
-			int meio2 = meio;
-			while(fabs(laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) <= ser_threshold_)
+			//cout<<"esq: "<<esq<<" ; dir: "<<dir<<endl;
+
+			meio = (esq + dir) / 2;
+
+			while ( (laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) >= -ser_threshold_ && (laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) <= ser_threshold_)
 			{
-				indice_busca_SER_[t] = meio;
-				meio--;
-				t++;
+				//cout<<"laser_data_energy_: "<<laser_data_energy_<<" | grid_pose_energy_[grid_indice_sorted_[meio]].energy: "<<grid_pose_energy_[grid_indice_sorted_[meio]].energy<<endl;
+				int meio2 = meio;
+				while(fabs(laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) <= ser_threshold_)
+				{
+					indice_busca_SER_[t] = meio;
+					meio--;
+					t++;
+				}
+				while(fabs(laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio2 + 1]].energy) <= ser_threshold_)
+				{
+					indice_busca_SER_[t] = meio2 + 1;
+					meio2++;
+					t++;
+				}
+				//cout<<"Quantidade de indices SER: "<<t<<endl;
+				num_particulas_SER_ = t;
+				busca_energia_SER_ok_ = true;
+				return true;
 			}
-			while(fabs(laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio2 + 1]].energy) <= ser_threshold_)
-			{
-				indice_busca_SER_[t] = meio2 + 1;
-				meio2++;
-				t++;
-			}
-			//cout<<"Quantidade de indices SER: "<<t<<endl;
-			num_particulas_SER_ = t;
-			return true;
+			if ( (laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) > ser_threshold_ ) esq = meio + 1;
+			else dir = meio - 1;
 		}
-		if ( (laser_data_energy_ - grid_pose_energy_[grid_indice_sorted_[meio]].energy) > ser_threshold_ ) esq = meio + 1;
-		else dir = meio - 1;
 	}
-	//cout<<"A buscaEnergiaSER não achou uma energia igual"<<endl;
 	return false;
 }
 
@@ -1146,7 +1151,7 @@ void Filtro_Particulas_Sakldmcl::spin()
 
 			}else if(grids_ok_ == true && odom_ok_ == true && laser_ok_ == true )
 			{
-				//cout<<"max_w_: "<<max_w_<<endl;
+				cout<<"max_w_: "<<max_w_<<endl;
 				if(max_w_ < weight_threshold_ && prim_converg_ == true)
 				{
 					cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
@@ -1155,6 +1160,7 @@ void Filtro_Particulas_Sakldmcl::spin()
 					cout<<endl;
 					ROS_INFO("ESPALHANDO AS PARTICULAS (kidnapping)!!!!!");
 					calculo_SER_ok_ = false;
+					busca_energia_SER_ok_ = false;
 				}else {num_part_local_ = num_part_;}
 
 				num_part_global_ = num_part_ - num_part_local_;
@@ -1167,10 +1173,12 @@ void Filtro_Particulas_Sakldmcl::spin()
 					//createParticles();
 				}
 				calculoSER();
-				if(calculo_SER_ok_ == true) buscaEnergiaSER();
-				//cout<<"Calculo_SER OK"<<endl;
-				if(buscaEnergiaSER() == true)
-					//cout<<"Busca SER OK"<<endl;
+				if(calculo_SER_ok_ == true)
+				{
+					buscaEnergiaSER();
+				}
+
+				if(busca_energia_SER_ok_ == true)
 				{
 					//ROS_INFO("Inicio do createParticles()");
 					if(create_particle_ok_ == 1)

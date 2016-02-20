@@ -215,6 +215,7 @@ class Filtro_Particulas_Sakldmcl
 		int create_particle_ok_;
 		bool grids_ok_;
 		bool calculo_SER_ok_;
+		bool busca_energia_SER_ok_;
 
 };
 
