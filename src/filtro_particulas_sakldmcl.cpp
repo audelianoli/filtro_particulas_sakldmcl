@@ -238,7 +238,8 @@ void Filtro_Particulas_Sakldmcl::createParticles()
 	//Criando partículas randômicas.
 
 	//mudando a semente do random
-	if(create_particle_ok_ == 1){
+	if(create_particle_ok_ == 1)
+	{
 		cout<<"Criei as partículas!##########@@@@@@@@@@!!!!!!!!!!!"<<endl;
 		cout<<"P_Local_: "<<num_part_local_<<" | P_Global_: "<<num_part_global_<<" | P_Total: "<<num_part_<<endl;
 		srand(time(NULL));
@@ -266,9 +267,9 @@ void Filtro_Particulas_Sakldmcl::createParticles()
 			//cout<<"particle_pose["<<i<<"]:\n"<<particle_pose_[i]<<endl;
 		}
 		cloud();
+		prim_converg_ = false;
+		create_particle_ok_ = 0;
 	}
-	prim_converg_ = false;
-	create_particle_ok_ = 0;
 }
 
 double Filtro_Particulas_Sakldmcl::gaussian(double mu, double sigma)
@@ -625,6 +626,7 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 		initial_pose_pub_.publish(initial_pose2_);
 
 		prim_converg_ = true;
+		//cout<<"Convergiu!!!!"<<endl;
 
 		//cout<<"x: "<<xmedia<<" | y: "<<ymedia<<" | theta: "<<thetamedia<<endl;
 	}
@@ -788,7 +790,7 @@ void Filtro_Particulas_Sakldmcl::ordenaGrid()
 	size_grid_energy_ = sorted_indice_;
 	merge_sort( grid_pose_energy_, 0, (size_grid_energy_ - 1) );
 	//cout<<"Grid Energy sorted: "<<grid_pose_energy_[grid_indice_sorted_[size_grid_energy_-1]].energy<<endl;
-	cout<<"size_grid_energy_: "<<size_grid_energy_<<endl;
+	//cout<<"size_grid_energy_: "<<size_grid_energy_<<endl;
 }
 
 void Filtro_Particulas_Sakldmcl::merge_sort (filtro_particulas_sakldmcl::grid_pose_energy vector[], const int low, const int high)
@@ -1151,10 +1153,9 @@ void Filtro_Particulas_Sakldmcl::spin()
 
 			}else if(grids_ok_ == true && odom_ok_ == true && laser_ok_ == true )
 			{
-				cout<<"max_w_: "<<max_w_<<endl;
+				cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
 				if(max_w_ < weight_threshold_ && prim_converg_ == true)
 				{
-					cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
 					//se peso máximo for menor que threshold, divide o sample set e habilita o cálculo de SER (compara fake_laser e real laser)
 					num_part_local_ = alpha_sample_set_ * num_part_;
 					cout<<endl;
