@@ -17,34 +17,32 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 //--------------------------------------------------------------------------------//
 	freq_ = 20.0;
 
-	//num_part_ = 1050;
 	num_part_local_ = 0;
 
 	max_part_ = 5000;
 	min_part_ = 100;
  	qtdd_laser_ = 30; //quantidade de pontos do laser que serão lidos
 	qtdd_orient_ = 8; //quantidade de giros no mesmo pose. Atentar-se ao numero de free_xy. qtdd_orient*free_xy < 100mil
-	//res_ = 0.0;//resolution_.resolution;
-	//passo_base = 0.0;//5*res_; //0.05;//0.025;
-	//map_meta_data_ = 0;
-	//map_position_x_ = 0;
-	//map_position_y_ = 0;
-	//cout<<"map resolution: "<<res_<<endl;
 	range_max_fakelaser = 10; //5.6; //[m]
-	//laser_noise_ = qtdd_laser_;
 
+	//Ruídos do laser, movimento linear e movimento angular
 	//noise_level = (desvio_padrao / max_range) * 100% || max_range * erro_desejado
 	laser_data_noise_ = 0.28; //(0.28 / 5.6) ~ 5%
-	move_noise_ = 0.032; //(0.016 / 0.2) ~ 8%
-	turn_noise_ = 0.024; //(0.012 / 0.15) ~ 8%
+	move_noise_ = 0.016; //(0.016 / 0.2) ~ 8%
+	turn_noise_ = 0.012; //(0.012 / 0.15) ~ 8%
 
 	//parâmetro para convergir
+
 	error_particles_ = 0.14; //0.45 ~ dist de 0.3m da particula (na media) ; 0.28 ~ 0.2m; 0.14 ~ 0.1m
+	dist_threshold_ = 0.5; //todas as partículas deverão estar até 0.5m em ambos os eixos para que seja considerado convergido
 
 	//parâmetros para SAMCL
 	ser_threshold_ = 0.035; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
-	weight_threshold_ = 0.0030; //0.0015 -> 0.10
-	alpha_sample_set_ = 0.2; //20% local e 80% global
+	weight_threshold_ = 0.0032; //0.0015 -> 0.10
+	alpha_sample_set_ = 0.8; //80% local e 20% global
+	fator_part_threshold_ = 10000;//3 //10000 -> desabilita
+
+	num_min_part_ = 10000;
 
 	//parâmetros para KLD
 	kld_err_ = 0.020; //quanto maior o erro, menor o número de partículas por k_bins
@@ -242,6 +240,7 @@ void Filtro_Particulas_Sakldmcl::createParticles()
 	{
 		cout<<"Criei as partículas!##########@@@@@@@@@@!!!!!!!!!!!"<<endl;
 		cout<<"P_Local_: "<<num_part_local_<<" | P_Global_: "<<num_part_global_<<" | P_Total: "<<num_part_<<endl;
+		cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
 		srand(time(NULL));
 
 		rand_xy = 0;
@@ -560,6 +559,7 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 	double thetaneg = 0.0;
 	double pos = 0.0;
 	double neg = 0.0;
+	double dx, dy, err;
 	sum = 0.0;
 
 	for (int i = 0; i < num_part_ ; i++)
@@ -594,15 +594,16 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 		thetamedia -= 2.0 * M_PI;
 	if(thetamedia <= - M_PI)
 		thetamedia += 2.0 * M_PI;
+
 	if(convergiu_ == 0)
 	{
 		for (int i = 0; i < num_part_ ; i++)
 		{
-			double dx = particle_pose_[i].x - xmedia;
+			dx = particle_pose_[i].x - xmedia;
 			//cout<<"partx - xmedia: "<<particle_pose_[i].x<<" - "<<xmedia<<endl;
-			double dy = particle_pose_[i].y - ymedia;
+			dy = particle_pose_[i].y - ymedia;
 			//cout<<"party - ymedia: "<<particle_pose_[i].y<<" - "<<ymedia<<endl;
-			double err = sqrt( (dx * dx) + (dy * dy) );
+			err = sqrt( (dx * dx) + (dy * dy) );
 			//cout<<"erro: "<<err<<endl;
 			sum += err;
 			//cout<<"sum: "<<sum<<endl;
@@ -874,7 +875,6 @@ void Filtro_Particulas_Sakldmcl::calculoSER()
 			{
 				//ROS_INFO("Atencao: Movimente ou gire o robo ate que o laser nao poduza mais dados NAN e INF");
 				cout<<"Atencao: Movimente ou gire o robo ate que o laser nao poduza mais dados NAN e INF"<<endl;
-
 				//laser_num = qtdd_laser_;
 				//calculo_SER_loop_ = true;
 			}
@@ -937,6 +937,7 @@ bool Filtro_Particulas_Sakldmcl::buscaEnergiaSER()
 
 void Filtro_Particulas_Sakldmcl::calculoNumKBins()
 {
+	//Método para carregar o vetor_pose_xy_bins_[] com as células intervaladas a cada bin.
 	//zerar o vetor
 	for(int j = 0 ; j < 10000 ; j++)
 	{
@@ -964,8 +965,11 @@ void Filtro_Particulas_Sakldmcl::calculoNumKBins()
 
 		pose_xy_bins_ = (10000 * celula_pose_x) + celula_pose_y;
 
+		//busca o valor de pose_xy_bins_
 		buscaPosexyBins();
-
+		//se existir, não faz nada. Se não, adicionar no início do vetor vetor_pose_xy_bins_,
+		//incrementar o número de bins ocupados pelas partículas
+		//e ordenar este vetor
 		if(buscaPosexyBins() == false)
 		{
 			vetor_pose_xy_bins_[0] = pose_xy_bins_;
@@ -981,13 +985,18 @@ void Filtro_Particulas_Sakldmcl::calculoSampleSize(int k)
 	int n;
 	int num_part_ant = num_part_;
 
+	if(num_part_ < num_min_part_)
+	{
+		num_min_part_ = num_part_;
+	}
+
 	if (k <= 1)
 	{
 		//cout<<endl;
 		//ROS_INFO("k: %d !!! Não devia...", k);
 		//num_part_ = max_part_;
 	}
-
+	//Cálculo do número de partículas utilizando a equação de KL-Distance
 	else
 	{
 		a = 1;
@@ -1010,7 +1019,7 @@ void Filtro_Particulas_Sakldmcl::calculoSampleSize(int k)
 			num_part_ = n;
 		}
 
-		//printf("\nnum_part_: %d | k: %d | n: %d | bins: %d | max_w: %f ", num_part_, k, n, bins_,max_w_);
+		printf("\nnum_part_: %d | k: %d | n: %d | bins: %d | max_w: %f | num_min_part: %d ", num_part_, k, n, bins_,max_w_, num_min_part_);
 	}
 
 	if(num_part_ > num_part_ant)
@@ -1153,8 +1162,12 @@ void Filtro_Particulas_Sakldmcl::spin()
 
 			}else if(grids_ok_ == true && odom_ok_ == true && laser_ok_ == true )
 			{
-				cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
-				if(max_w_ < weight_threshold_ && prim_converg_ == true)
+				//cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
+
+				//haverá espalhamento de partículas se o peso máximo for menor que o threshold ou o número de partículas
+				//aumentarem em função do fator_part_threshold. E, também, somente após a primeira convergência
+				int arredondamento = fator_part_threshold_ * num_min_part_;
+				if((max_w_ < weight_threshold_ || num_part_ > arredondamento) && prim_converg_ == true )
 				{
 					//se peso máximo for menor que threshold, divide o sample set e habilita o cálculo de SER (compara fake_laser e real laser)
 					num_part_local_ = alpha_sample_set_ * num_part_;

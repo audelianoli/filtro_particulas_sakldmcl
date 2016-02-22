@@ -114,6 +114,7 @@ class Filtro_Particulas_Sakldmcl
 		double passo_base;
 		double range_max_fakelaser; //[m]
 		double error_particles_;
+		double dist_threshold_;
 		bool prim_converg_;
 
 		//variáveis para SAMCL
@@ -122,9 +123,12 @@ class Filtro_Particulas_Sakldmcl
 		double weight_threshold_;
 		double alpha_sample_set_;
 
+		double fator_part_threshold_;
+
 		//variáveis para KLD
 		int max_part_;
 		int min_part_;
+		int num_min_part_;
 		double kld_err_;
 		double kld_z_;
 		int bins_;
