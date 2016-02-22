@@ -123,6 +123,18 @@ class Filtro_Particulas_Sakldmcl
 		double weight_threshold_;
 		double alpha_sample_set_;
 
+		int num_energy_;
+		int size_grid_energy_;
+		int sorted_indice_;
+		int grid_indice_sorted_[100000];
+		double grid_sorted_[100000];
+		double laser_data_energy_;
+		int indice_busca_SER_[100000];
+		int num_particulas_SER_;
+		bool calculo_SER_loop_;
+
+		double ser_threshold_;
+
 		double fator_part_threshold_;
 
 		//variáveis para KLD
@@ -174,17 +186,6 @@ class Filtro_Particulas_Sakldmcl
 		int yi;
 		int i;
 		int num_laser;
-		int num_energy_;
-		int size_grid_energy_;
-		int sorted_indice_;
-		int grid_indice_sorted_[100000];
-		double grid_sorted_[100000];
-		double laser_data_energy_;
-		int indice_busca_SER_[100000];
-		int num_particulas_SER_;
-		bool calculo_SER_loop_;
-
-		double ser_threshold_;
 
 		geometry_msgs::Pose2D delta_pose_;
 		geometry_msgs::Pose2D pose_anterior_;

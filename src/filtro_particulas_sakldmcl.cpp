@@ -28,17 +28,17 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 	//Ruídos do laser, movimento linear e movimento angular
 	//noise_level = (desvio_padrao / max_range) * 100% || max_range * erro_desejado
 	laser_data_noise_ = 0.28; //(0.28 / 5.6) ~ 5%
-	move_noise_ = 0.016; //(0.016 / 0.2) ~ 8%
-	turn_noise_ = 0.012; //(0.012 / 0.15) ~ 8%
+	move_noise_ = 0.032; //(0.016 / 0.2) ~ 8%
+	turn_noise_ = 0.024; //(0.012 / 0.15) ~ 8%
 
 	//parâmetro para convergir
 
-	error_particles_ = 0.14; //0.45 ~ dist de 0.3m da particula (na media) ; 0.28 ~ 0.2m; 0.14 ~ 0.1m
+	error_particles_ = 0.30; //0.45 ~ dist de 0.3m da particula (na media) ; 0.28 ~ 0.2m; 0.14 ~ 0.1m
 	dist_threshold_ = 0.5; //todas as partículas deverão estar até 0.5m em ambos os eixos para que seja considerado convergido
 
 	//parâmetros para SAMCL
 	ser_threshold_ = 0.035; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
-	weight_threshold_ = 0.0032; //0.0015 -> 0.10
+	weight_threshold_ = 0.0025; //0.0015 -> 0.10 //Quanto maior o num_part_ maior deverá ser o weight_threshold
 	alpha_sample_set_ = 0.8; //80% local e 20% global
 	fator_part_threshold_ = 10000;//3 //10000 -> desabilita
 
@@ -613,10 +613,11 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 		//usleep(250000);
 	}
 
-	initial_pose2_.x = xmedia;
+	//Comente as 3 linhas abaixo caso queira visualizar apenas o pose convergido
+/*	initial_pose2_.x = xmedia;
 	initial_pose2_.y = ymedia;
 	initial_pose2_.theta = thetamedia;
-
+*/
 	if(sum < error_particles_)
 	{
 		//Para publicar o pose médio.
@@ -1169,6 +1170,7 @@ void Filtro_Particulas_Sakldmcl::spin()
 				int arredondamento = fator_part_threshold_ * num_min_part_;
 				if((max_w_ < weight_threshold_ || num_part_ > arredondamento) && prim_converg_ == true )
 				{
+					cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
 					//se peso máximo for menor que threshold, divide o sample set e habilita o cálculo de SER (compara fake_laser e real laser)
 					num_part_local_ = alpha_sample_set_ * num_part_;
 					cout<<endl;
