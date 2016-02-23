@@ -13,16 +13,17 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 	initial_pose_pub_ = n.advertise<geometry_msgs::Pose2D>("filterparticlepose", 1, true);
 	particle_cloud_pub_ = n.advertise<geometry_msgs::PoseArray>("particlecloudAU", 2, true);
 	particle_curr_pose_pub_ = n.advertise<geometry_msgs::PoseArray>("particle_curr_pose", 2, true);
+	marker_converted_pose_pub_ = n.advertise<visualization_msgs::Marker>("visualization_mcl_pose", 10, true);
 
 //--------------------------------------------------------------------------------//
-	freq_ = 20.0;
+	freq_ = 30.0;
 
 	num_part_local_ = 0;
 
 	max_part_ = 5000;
 	min_part_ = 100;
  	qtdd_laser_ = 30; //quantidade de pontos do laser que serão lidos
-	qtdd_orient_ = 8; //quantidade de giros no mesmo pose. Atentar-se ao numero de free_xy. qtdd_orient*free_xy < 100mil
+	qtdd_orient_ = 18; //quantidade de giros no mesmo pose. Atentar-se ao numero de free_xy. qtdd_orient*free_xy < 100mil
 	range_max_fakelaser = 10; //5.6; //[m]
 
 	//Ruídos do laser, movimento linear e movimento angular
@@ -33,19 +34,19 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 
 	//parâmetro para convergir
 
-	error_particles_ = 0.30; //0.45 ~ dist de 0.3m da particula (na media) ; 0.28 ~ 0.2m; 0.14 ~ 0.1m
+	error_particles_ = 0.25; //0.45 ~ dist de 0.3m da particula (na media) ; 0.28 ~ 0.2m; 0.14 ~ 0.1m
 	dist_threshold_ = 0.5; //todas as partículas deverão estar até 0.5m em ambos os eixos para que seja considerado convergido
 
 	//parâmetros para SAMCL
-	ser_threshold_ = 0.035; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
-	weight_threshold_ = 0.0025; //0.0015 -> 0.10 //Quanto maior o num_part_ maior deverá ser o weight_threshold
-	alpha_sample_set_ = 0.8; //80% local e 20% global
+	ser_threshold_ = 0.024; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
+	weight_threshold_ = 0.0030; //0.0015 -> 0.10 //Quanto maior o num_part_ maior deverá ser o weight_threshold
+	alpha_sample_set_ = 0.6; //80% local e 20% global
 	fator_part_threshold_ = 10000;//3 //10000 -> desabilita
 
 	num_min_part_ = 10000;
 
 	//parâmetros para KLD
-	kld_err_ = 0.020; //quanto maior o erro, menor o número de partículas por k_bins
+	kld_err_ = 0.02; //quanto maior o erro, menor o número de partículas por k_bins
 	kld_z_ = 3; //upper 1 − δ quantile of the standard normal distribution -> usar tabela de quantil
 
 
@@ -124,6 +125,8 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 	grids_ok_ = false;
 	calculo_SER_ok_ = false;
 	busca_energia_SER_ok_ = false;
+	save_initial_time_ = false;
+	time_converged_ok_ = false;
 
 }
 
@@ -137,6 +140,7 @@ Filtro_Particulas_Sakldmcl::~Filtro_Particulas_Sakldmcl()
 	initial_pose_pub_.shutdown();
 	particle_cloud_pub_.shutdown();
 	particle_curr_pose_pub_.shutdown();
+	marker_converted_pose_pub_.shutdown();
 }
 
 void Filtro_Particulas_Sakldmcl::mapCallback(const nav_msgs::MapMetaDataConstPtr& msg)
@@ -223,6 +227,13 @@ void Filtro_Particulas_Sakldmcl::odomCallback (const nav_msgs::OdometryConstPtr&
 	pose_theta_ = tf::getYaw(msg->pose.pose.orientation);
 
 	twist_x_ = msg->twist.twist.linear.x;
+
+	if((msg->twist.twist.linear.x != 0 || msg->twist.twist.angular.z != 0 )&& save_initial_time_ == false)
+	{
+		time_initial_sec_ = ros::Time::now();
+		save_initial_time_ = true;
+		cout<<"time_initial_sec_: "<<time_initial_sec_<<endl;
+	}
 	//cout<<"TWIST: "<<twist_x_<<endl;
 
 //	cout<<"theta: "<<pose_theta_<<" ; quat: "<<quat<<endl;
@@ -320,7 +331,7 @@ void Filtro_Particulas_Sakldmcl::fakeLaser()
 			for(int p = 1; p <= iteracao; p++)
 			{
 				//varredura do fake_laser
-				passo = passo_base * p;
+				passo = (passo_base * p); //+ gaussian(0,laser_data_noise_);
 				//cout<<"passo: "<<passo<<endl;
 				x = fake_laser_pose_[num_laser].x + (cos(fake_laser_pose_[num_laser].theta) * passo);
 				y = fake_laser_pose_[num_laser].y + (sin(fake_laser_pose_[num_laser].theta) * passo);
@@ -400,7 +411,7 @@ double Filtro_Particulas_Sakldmcl::findObstacle(double x, double y)
 
 double Filtro_Particulas_Sakldmcl::measurementProb(int particleMP, int laserMP)
 {
-	probt +=  fabs(weight_part_laser_[particleMP][laserMP] - (laser_data_[laserMP] + gaussian(0,laser_data_noise_)));
+	probt +=  fabs(weight_part_laser_[particleMP][laserMP] - (laser_data_[laserMP])); //+ gaussian(0,laser_data_noise_)));
 
 	//probt *= gaussian(laser_data_[laserMP], laser_noise_, weight_part_laser_[particleMP][laserMP]);
 	//usleep(250000);
@@ -625,7 +636,18 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 		initial_pose2_.y = ymedia;
 		initial_pose2_.theta = thetamedia;
 
-		initial_pose_pub_.publish(initial_pose2_);
+		//if(max_w_ > 0.0035)
+			initial_pose_pub_.publish(initial_pose2_);
+
+		if(time_converged_ok_ == false)
+		{
+			time_converged_ok_ = true;
+			time_converged_sec_ = ros::Time::now();
+			time_to_converge_sec_ = time_converged_sec_ - time_initial_sec_;
+			cout<<"time_converged_sec_: "<<time_converged_sec_<<" | time_initial_sec_: "<<time_initial_sec_<<" | Delta Time: "<<time_to_converge_sec_<<endl;
+		}
+
+		visualizationMarker();
 
 		prim_converg_ = true;
 		//cout<<"Convergiu!!!!"<<endl;
@@ -657,6 +679,49 @@ void Filtro_Particulas_Sakldmcl::cloud()
 				tf::Vector3(initial_pose2_.x + map_position_x_, initial_pose2_.y + map_position_y_, 0)),pose_curr_msg.poses[0]);
 
 	particle_curr_pose_pub_.publish(pose_curr_msg);
+}
+
+void Filtro_Particulas_Sakldmcl::visualizationMarker()
+{
+	points_.header.frame_id = line_strip_.header.frame_id = line_list_.header.frame_id = "map";
+	points_.header.stamp = line_strip_.header.stamp = line_list_.header.stamp = ros::Time::now();
+	points_.ns = line_strip_.ns = line_list_.ns = "points_and_lines";
+	points_.action = line_strip_.action = line_list_.action = visualization_msgs::Marker::ADD;
+
+	points_.id = 0;
+	line_strip_.id = 1;
+	line_list_.id = 2;
+
+	points_.type = visualization_msgs::Marker::POINTS;
+	line_strip_.type = visualization_msgs::Marker::LINE_STRIP;
+	line_list_.type = visualization_msgs::Marker::LINE_LIST;
+
+	// POINTS markers use x and y scale for width/height respectively
+	points_.scale.x = points_.scale.y = 0.03;
+	// LINE_STRIP/LINE_LIST markers use only the x component of scale, for the line width
+	line_strip_.scale.x = 0.1;
+	line_list_.scale.x = 0.1;
+
+	// Points are green
+	points_.color.g = 1.0f;
+	points_.color.a = 1.0;
+
+	// Line strip is blue
+	line_strip_.color.b = 1.0;
+	line_strip_.color.a = 1.0;
+
+	// Line list is red
+	line_list_.color.r = 1.0;
+	line_list_.color.a = 1.0;
+
+	geometry_msgs::Point p;
+	p.x = initial_pose2_.x + map_position_x_;
+	p.y = initial_pose2_.y + map_position_y_;
+
+	points_.points.push_back(p);
+
+	marker_converted_pose_pub_.publish(points_);
+
 }
 
 void Filtro_Particulas_Sakldmcl::createGrids()
@@ -718,7 +783,7 @@ void Filtro_Particulas_Sakldmcl::createGrids()
 				{
 					//ROS_INFO("For do p-interacao ");
 					//varredura do fake_laser
-					passo = (passo_base * p) + gaussian(0,laser_data_noise_);
+					passo = (passo_base * p); // + gaussian(0,laser_data_noise_);
 					//cout<<"passo: "<<passo<<" | p: "<<p<<" | iteracao: "<<iteracao<<endl;
 					x = fake_laser_pose_[num_laser].x + (cos(fake_laser_pose_[num_laser].theta) * passo);
 					y = fake_laser_pose_[num_laser].y + (sin(fake_laser_pose_[num_laser].theta) * passo);
@@ -863,6 +928,7 @@ void Filtro_Particulas_Sakldmcl::calculoSER()
 	{
 		calculo_SER_loop_ = false;
 		laser_data_energy_ = 0.0;
+		int valores_nao_validos = 0;
 
 		for (int laser_num = 0 ; laser_num < qtdd_laser_ ; laser_num++)
 		{
@@ -872,15 +938,21 @@ void Filtro_Particulas_Sakldmcl::calculoSER()
 
 				laser_data_energy_ += (1 - (laser_data_[laser_num] / range_max_fakelaser));
 				//cout<<"laser_data_energy_: "<<laser_data_energy_<<endl;
+
+
 			}else
 			{
-				//ROS_INFO("Atencao: Movimente ou gire o robo ate que o laser nao poduza mais dados NAN e INF");
+				valores_nao_validos++;
 				cout<<"Atencao: Movimente ou gire o robo ate que o laser nao poduza mais dados NAN e INF"<<endl;
+				laser_data_energy_ += (1 - (laser_data_[laser_num - valores_nao_validos] / range_max_fakelaser));
+				//usando um valor grande para que no buscaEnergia() não ache e obrigue a recalcular o SER
+				//laser_data_energy_ = 100;
 				//laser_num = qtdd_laser_;
 				//calculo_SER_loop_ = true;
 			}
 		}
-
+		if(valores_nao_validos >= 7) calculo_SER_loop_ = true;
+		//laser_data_energy_ = laser_data_energy_ / qtdd_laser_;
 		laser_data_energy_ = laser_data_energy_ / qtdd_laser_;
 		//cout<<"laser_data_energy_normalizado_: "<<laser_data_energy_<<endl;
 		if(calculo_SER_loop_ == true)
@@ -892,7 +964,7 @@ void Filtro_Particulas_Sakldmcl::calculoSER()
 
 bool Filtro_Particulas_Sakldmcl::buscaEnergiaSER()
 {
-	if(busca_energia_SER_ok_ == false)
+	//if(busca_energia_SER_ok_ == false)
 	{
 		//busca uma energia igual à achada no calculoSER() no grid_pose_energy e salva o numero de particulas com a mesma energia.
 		int esq, meio, dir;
@@ -1157,7 +1229,7 @@ void Filtro_Particulas_Sakldmcl::spin()
 				//é feito apenas uma vez (depois que carrega um mapa)
 
 				createGrids();
-
+				cout<<"Grids created"<<endl;
 				//no início de tudo: num_part_ = max_part_
 				num_part_ = max_part_;
 
@@ -1189,12 +1261,11 @@ void Filtro_Particulas_Sakldmcl::spin()
 					//createParticles();
 				}
 				calculoSER();
-				if(calculo_SER_ok_ == true)
-				{
-					buscaEnergiaSER();
-				}
+				if(calculo_SER_ok_ == true) buscaEnergiaSER();
 
-				if(busca_energia_SER_ok_ == true)
+				if(busca_energia_SER_ok_ == false)
+					calculo_SER_ok_ = false;
+				else
 				{
 					//ROS_INFO("Inicio do createParticles()");
 					if(create_particle_ok_ == 1)
@@ -1225,38 +1296,4 @@ void Filtro_Particulas_Sakldmcl::spin()
 		}
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
