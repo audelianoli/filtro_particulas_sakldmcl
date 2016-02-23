@@ -29,8 +29,8 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 	//Ruídos do laser, movimento linear e movimento angular
 	//noise_level = (desvio_padrao / max_range) * 100% || max_range * erro_desejado
 	laser_data_noise_ = 0.28; //(0.28 / 5.6) ~ 5%
-	move_noise_ = 0.032; //(0.016 / 0.2) ~ 8%
-	turn_noise_ = 0.024; //(0.012 / 0.15) ~ 8%
+	move_noise_ = 0.020; //(0.016 / 0.2) ~ 8%
+	turn_noise_ = 0.015; //(0.012 / 0.15) ~ 8%
 
 	//parâmetro para convergir
 
@@ -38,6 +38,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 	dist_threshold_ = 0.5; //todas as partículas deverão estar até 0.5m em ambos os eixos para que seja considerado convergido
 
 	//parâmetros para SAMCL
+
 	ser_threshold_ = 0.024; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
 	weight_threshold_ = 0.0030; //0.0015 -> 0.10 //Quanto maior o num_part_ maior deverá ser o weight_threshold
 	alpha_sample_set_ = 0.6; //80% local e 20% global
@@ -46,7 +47,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n)
 	num_min_part_ = 10000;
 
 	//parâmetros para KLD
-	kld_err_ = 0.02; //quanto maior o erro, menor o número de partículas por k_bins
+	kld_err_ = 0.020; //quanto maior o erro, menor o número de partículas por k_bins
 	kld_z_ = 3; //upper 1 − δ quantile of the standard normal distribution -> usar tabela de quantil
 
 
