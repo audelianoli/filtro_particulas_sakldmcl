@@ -18,10 +18,14 @@
 #include <time.h>
 #include <math.h>
 #include <iostream>
+#include <fstream>
 #include <random>
 #include <cmath>
 #include <cstdlib>
 #include <chrono>
+#include <boost/foreach.hpp>
+#define foreach BOOST_FOREACH
+
 
 #include "std_msgs/MultiArrayLayout.h"
 #include "std_msgs/MultiArrayDimension.h"
@@ -78,6 +82,7 @@ class Filtro_Particulas_Sakldmcl
 		void merge_sort (int vector[], const int low, const int high);
 		void merge (int vector[], const int low, const int mid, const int high);
 		void calculoSampleSize(int k);
+		void escreveTxt();
 
 		void spin();
 
@@ -103,11 +108,24 @@ class Filtro_Particulas_Sakldmcl
 		geometry_msgs::Pose2D particle_resample_[10000];
 		geometry_msgs::PoseWithCovarianceStamped initial_pose_;
 		geometry_msgs::Pose2D initial_pose2_;
+		geometry_msgs::PoseArray pose_curr_msg;
 
 		visualization_msgs::Marker points_, line_strip_, line_list_;
 
 		filtro_particulas_sakldmcl::grid_pose_energy grid_pose_energy_[100000];
 		//filtro_particulas_sakldmcl::grid_pose_energy grid_sorted_[100000];
+
+		//variáveis para criar aquivo de media e desvio padrao a partir do bag
+		ros::Time time_bag_inicio;
+		ros::Time time_bag_curr;
+		ros::Duration time_bag_dif;
+		int pos_amostra_;
+		ofstream myfile_;
+		int num_bag_amostras_;
+		int qtdd_amostras_;
+		double seq_laser_;
+		double seq_laser_ant_;
+		int r_bag_;
 
 		double map_meta_data_;
 		double res_;
@@ -176,7 +194,6 @@ class Filtro_Particulas_Sakldmcl
 		int min_y_;
 		int max_x_;
 		int max_y_;
-		int convergiu_;
 		bool obstacle_finded_;
 		int obstacle_;
 		int achou;
@@ -234,7 +251,9 @@ class Filtro_Particulas_Sakldmcl
 		bool grids_ok_;
 		bool calculo_SER_ok_;
 		bool busca_energia_SER_ok_;
-
+		bool abriu_txt_ok_;
+		bool zerar_time_ok_;
+		bool reduziu_num_part_;
 };
 
 #endif
