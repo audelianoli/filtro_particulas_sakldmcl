@@ -85,6 +85,7 @@ class Filtro_Particulas_Sakldmcl
 		void merge (int vector[], const int low, const int mid, const int high);
 		void calculoSampleSize(int k);
 		void escreveTxt();
+		void kidnapping();
 
 		void spin();
 
@@ -252,7 +253,7 @@ class Filtro_Particulas_Sakldmcl
 		bool odom_ok_;
 		bool laser_ok_;
 		bool zerar_deltas_;
-		int create_particle_ok_;
+		bool create_particle_ok_;
 		bool grids_ok_;
 		bool calculo_SER_ok_;
 		bool busca_energia_SER_ok_;
