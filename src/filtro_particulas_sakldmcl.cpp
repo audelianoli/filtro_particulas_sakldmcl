@@ -136,6 +136,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	time_converged_ok_ = false;
 	abriu_txt_ok_ = false;
 	zerar_time_ok_ = false;
+	kidnapping_ok_ = false;
 
 }
 
@@ -290,8 +291,8 @@ void Filtro_Particulas_Sakldmcl::createParticles()
 	if(create_particle_ok_ == 1)
 	{
 		cout<<"Particles Created!!!!!"<<endl;
-		cout<<"Local_Particles: "<<num_part_local_<<" | Global_Particles: "<<num_part_global_<<" | Total_Particles: "<<num_part_<<endl;
-		cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
+		//cout<<"Local_Particles: "<<num_part_local_<<" | Global_Particles: "<<num_part_global_<<" | Total_Particles: "<<num_part_<<endl;
+		//cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
 
 		srand(time(NULL));
 
@@ -321,6 +322,23 @@ void Filtro_Particulas_Sakldmcl::createParticles()
 		prim_converg_ = false;
 		create_particle_ok_ = 0;
 	}
+}
+
+double Filtro_Particulas_Sakldmcl::gaussian(double mu, double sigma, double x)
+{
+	double a;
+	double b;
+
+	a = (mu - x) * (mu - x);
+	b = sigma * sigma;
+	gaussian_ = (exp(- a / b / 2.0)) / (sqrt(2.0 * M_PI) * sigma);
+
+	//cout<<"Gaussian (mu,sigma,x): mu: "<<mu<<" | sigma: "<<sigma<<" | laser_Data: "<<x<<" | gaussian3: "<<gaussian_<<endl;
+	//usleep(25000);
+	//cout<<mu<<endl;
+
+	return gaussian_;
+
 }
 
 double Filtro_Particulas_Sakldmcl::gaussian(double mu, double sigma)
@@ -421,6 +439,97 @@ void Filtro_Particulas_Sakldmcl::fakeLaser()
 	//cout<<"Fake_laser()"<<endl;
 }
 
+/*void Filtro_Particulas_Sakldmcl::fakeAllLaserBeam()
+{
+	x = 0;
+	y = 0;
+	xi = 0;
+	yi = 0;
+	i = 0;
+	num_laser = 0;
+	achou = 0;
+	total = 0;
+
+	//num_part_ = 1;
+	//qtdd_laser_ = 180;
+	weight_all_laserbeam_ = 0;
+
+	for (int i = 0; i < 1; i++)
+	{
+		probtg = 0.0;
+		//probt = 0.0;
+
+		double it = M_PI / (180);
+
+		for(num_laser = 0 ; num_laser < 180 ; num_laser++)
+		{
+			fake_laser_pose_[num_laser].theta = ((ang_min_) + (num_laser * it)) + initial_pose2_.theta;
+			if(fake_laser_pose_[num_laser].theta > M_PI)
+				fake_laser_pose_[num_laser].theta -= 2.0 * M_PI;
+			if(fake_laser_pose_[num_laser].theta <= - M_PI)
+				fake_laser_pose_[num_laser].theta += 2.0 * M_PI;
+
+			fake_laser_pose_[num_laser].x = initial_pose2_.x;
+			fake_laser_pose_[num_laser].y = initial_pose2_.y;
+		}
+
+		for(num_laser = 0 ; num_laser < 180 ; num_laser++)
+		{
+			passo = 0;
+			int iteracao = 7.0 / passo_base; //range_max_fakelaser / passo_base; // 5.6 / 0.06 = 112
+
+			for(int p = 1; p <= iteracao; p++)
+			{
+				//varredura do fake_laser
+				passo = (passo_base * p); //+ gaussian(0,laser_data_noise_);
+				//cout<<"passo: "<<passo<<endl;
+				x = fake_laser_pose_[num_laser].x + (cos(fake_laser_pose_[num_laser].theta) * passo);
+				y = fake_laser_pose_[num_laser].y + (sin(fake_laser_pose_[num_laser].theta) * passo);
+				//if(x >= 0 && y >= 0)
+				{
+					//cout<<"Nao arredondado--- "<<"x: "<<x<<"; y: "<<y<<endl;
+					//arredondando os valores de x e y
+					xi = x / res_;
+					yi = y / res_;
+					//cont++;
+					//cout<<"Arredondado--- "<<"xi: "<<xi<<"; yi: "<<yi<<" cont: "<<cont<<endl;
+
+					findObstacle(xi, yi);
+					if (obstacle_finded_ == true){
+						fake_laser_data_[i][num_laser] = obstacle_;
+
+						//cout<<"Dist-> Particula: "<<i<<" ; num_laser: "<<num_laser<<" ; passo: "<<weight_part_laser_[i][num_laser]<<endl;
+						p = iteracao;
+
+					}else fake_laser_data_[i][num_laser] = 0;
+				}
+			}
+			//weight_part_laser_[i][num_laser] = passo; //DISTANCIA FAKE DE CADA FEIXE DO LASER VIRTUAL!!!
+
+			//cout<<"Part["<<i<<"]["<<num_laser<<"] = "<<passo<<" | laser_data["<<num_laser<<"] = "<<laser_data_[num_laser]<<endl;
+			//usleep(100000);
+
+			if(laser_data_[num_laser] > 0)
+				measurementProb(i,num_laser);
+			//else cout<<"Valores NAN e INF nao entram no measurementProb!!! Part: "<<num_part_<<"  Laser: "<<num_laser<<endl;
+			//cout<<"Dist-> Particula: "<<i<<" ; num_laser: "<<num_laser<<" ; passo: "<<weight_part_laser_[i][num_laser]<<endl;
+			//usleep(100000);
+			//cout<<"Dist-> Particula: "<<i<<" ; num_laser: "<<num_laser<<" ; passo: "<<weight_part_laser_[i][num_laser]<<endl;
+			//cout<<"fake_laser_data_["<<i<<"]"<<"["<<num_laser<<"]: "<<fake_laser_data_[i][num_laser]<<endl;
+		}
+		cout<<"probtg: "<<probtg<<endl;
+
+		probtg = 1/probtg;
+		weight_all_laserbeam_ = probtg;
+
+		//total += weight_all_laserbeam_;
+		//cout<<"weight_all_laserbeam_: "<<weight_all_laserbeam_<<endl;
+		//usleep(25000);
+	}
+	//cout<<"ACHOU OBST: "<<achou<<endl;
+	//cout<<"Fake_laser()"<<endl;
+}*/
+
 double Filtro_Particulas_Sakldmcl::findObstacle(double x, double y)
 {
 	int esq, meio, dir;
@@ -454,9 +563,12 @@ double Filtro_Particulas_Sakldmcl::measurementProb(int particleMP, int laserMP)
 {
 	probt +=  fabs(weight_part_laser_[particleMP][laserMP] - (laser_data_[laserMP])); //+ gaussian(0,laser_data_noise_)));
 
-	//probt *= gaussian(laser_data_[laserMP], laser_noise_, weight_part_laser_[particleMP][laserMP]);
+	//probtg += fabs(passo - (laser_data_[laserMP]));
+
+	//probtg += gaussian(laser_data_[laserMP], laser_data_noise_, passo); //(real, ruído, fake)
+
 	//usleep(250000);
-	//cout<<"laser_virtual_["<<particleMP<<"]["<<laserMP<<"]: "<<weight_part_laser_[particleMP][laserMP]<<" | "<<laser_noise_<<" | "<<laser_data_[laserMP]<<" | prob: "<<probt<<endl;
+	//cout<<"laser_data: "<<laser_data_[laserMP]<<" | laser_data_noise: "<<laser_data_noise_<<" | passo: "<<passo<<" | probtg: "<<probtg<<endl;
 	//cout<<"Particula: "<<p<<" | Num_laser: "<<l<<" ; Data: "<<laser_data_[l]<<" | Peso: "<<weight_part_laser_[p][l]<<endl;
 
 	return probt;
@@ -594,18 +706,11 @@ void Filtro_Particulas_Sakldmcl::moveParticles()
 
 		pubInicialPose();
 
-		if(max_part_ <= 2500 && prim_converg_ == false)
-		{
-
-		}
-		else
-		{
-			calculoNumKBins();
+		calculoNumKBins();
 			//caso queira desabilitar o KLD
 			//k_bins_ = 0;
-			calculoSampleSize(k_bins_);
-		}
-		cout<<"Num_part: "<<num_part_<<endl;
+		calculoSampleSize(k_bins_);
+		//cout<<"Num_part: "<<num_part_<<endl;
 
 	}
 }
@@ -1152,7 +1257,7 @@ void Filtro_Particulas_Sakldmcl::calculoSampleSize(int k)
 		}
 
 		//printf("Number_Particle: %d | k_bins: %d | n: %d | bins: %d | max_w: %f | num_min_part: %d \n", num_part_, k, n, bins_,max_w_, num_min_part_);
-		//printf("Number_Particle: %d | k_bins: %d | bins: %d | max_weight: %f | num_min_part: %d \n", num_part_, k_bins_, bins_,max_w_, num_min_part_);
+		printf("Number_Particle: %d | k_bins: %d | bins: %d | max_weight: %f | num_min_part: %d \n", num_part_, k_bins_, bins_,max_w_, num_min_part_);
 	}
 
 	if(num_part_ > num_part_ant)
@@ -1355,6 +1460,15 @@ void Filtro_Particulas_Sakldmcl::spin()
 		cout<<"---------------------"<<endl;
 		usleep(500000);
 */
+/*		//Só para testar o gauss3
+		for(int l=0;l<=5;l++)
+		{
+			double gauss3 = gaussian(l,laser_data_noise_,l);
+			cout<<"gauss3: "<<gauss3<<endl;
+		}
+		cout<<"---------------------"<<endl;
+		usleep(500000);
+*/
 
 		//verificando se o mapa foi carregado
 		if (free_ok_ == true && occ_ok_ == true)
@@ -1382,17 +1496,28 @@ void Filtro_Particulas_Sakldmcl::spin()
 				int arredondamento = fator_part_threshold_ * num_min_part_;
 				if((max_w_ < weight_threshold_ || num_part_ > arredondamento) && prim_converg_ == true && reduziu_num_part_ == true)
 				{
-					//cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
-					//se peso máximo for menor que threshold, divide o sample set e habilita o cálculo de SER (compara fake_laser e real laser)
-					//num_part_local_ = alpha_sample_set_ * num_part_;
-					num_part_local_ = alpha_sample_set_ * max_part_;
-					num_part_global_ = max_part_ - num_part_local_;
-					num_part_ = max_part_;
-					//cout<<endl;
-					ROS_INFO("KIDNAPPING!!!!!");
-					calculo_SER_ok_ = false;
-					busca_energia_SER_ok_ = false;
-					reduziu_num_part_ = false;
+					//fakeAllLaserBeam();
+					cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
+
+					//if(weight_all_laserbeam_ < 0.15)
+					{
+
+						//se peso máximo for menor que threshold, divide o sample set e habilita o cálculo de SER (compara fake_laser e real laser)
+						//num_part_local_ = alpha_sample_set_ * num_part_;
+						num_part_local_ = alpha_sample_set_ * max_part_;
+						num_part_global_ = max_part_ - num_part_local_;
+						num_part_ = max_part_;
+						//cout<<endl;
+						ROS_INFO("KIDNAPPING!!!!!");
+						calculo_SER_ok_ = false;
+						busca_energia_SER_ok_ = false;
+						reduziu_num_part_ = false;
+						kidnapping_ok_ = true;
+					//}else
+					//{
+					//	num_part_local_ = num_part_;
+					//	num_part_global_ = num_part_ - num_part_local_;
+					}
 				}else
 				{
 					num_part_local_ = num_part_;
@@ -1400,11 +1525,12 @@ void Filtro_Particulas_Sakldmcl::spin()
 				}
 
 
-				if(num_part_global_ != 0)
+				if(kidnapping_ok_ == true)
 				{
 					//habilita o espalhamento das partículas
 					//cout<<"P_Local_: "<<num_part_local_<<" | P_Global_: "<<num_part_global_<<" | P_Total: "<<num_part_<<endl;
 					create_particle_ok_ = 1;
+					kidnapping_ok_ = false;
 					//createParticles();
 				}
 				calculoSER();

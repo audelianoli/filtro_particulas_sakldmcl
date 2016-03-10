@@ -51,12 +51,14 @@ class Filtro_Particulas_Sakldmcl
 		void createParticles();
 
 		void fakeLaser();
+		void fakeAllLaserBeam();
 		double findObstacle(double x, double y);
 		void moveParticles();
 		void weightParticles();
 		void resample();
 		double measurementProb(int particleMP, int laserMP);
 
+		double gaussian(double mu, double sigma, double x);
 		double gaussian(double mu, double sigma);
 
 		void odomCallback (const nav_msgs::OdometryConstPtr& msg);
@@ -126,6 +128,8 @@ class Filtro_Particulas_Sakldmcl
 		double seq_laser_;
 		double seq_laser_ant_;
 		int r_bag_;
+
+		double weight_all_laserbeam_;
 
 		double map_meta_data_;
 		double res_;
@@ -201,6 +205,7 @@ class Filtro_Particulas_Sakldmcl
 		int cont;
 		double total;
 		double probt;
+		double probtg;
 		double passo;
 		double sum;
 		int index_max_w_;
@@ -254,6 +259,7 @@ class Filtro_Particulas_Sakldmcl
 		bool abriu_txt_ok_;
 		bool zerar_time_ok_;
 		bool reduziu_num_part_;
+		bool kidnapping_ok_;
 };
 
 #endif
