@@ -87,6 +87,9 @@ class Filtro_Particulas_Sakldmcl
 		void escreveTxt();
 		void kidnapping();
 
+		void calculoNumKBinsForCreateParticles();
+		void calculoSampleSizeForCreateParticles(int k);
+
 		void spin();
 
 	private:
@@ -111,7 +114,9 @@ class Filtro_Particulas_Sakldmcl
 		geometry_msgs::Pose2D particle_resample_[10000];
 		geometry_msgs::PoseWithCovarianceStamped initial_pose_;
 		geometry_msgs::Pose2D initial_pose2_;
+		geometry_msgs::Pose2D initial_pose_out_;
 		geometry_msgs::PoseArray pose_curr_msg;
+		geometry_msgs::PoseArray pose_out_msg;
 
 		visualization_msgs::Marker points_, line_strip_, line_list_;
 
@@ -129,6 +134,8 @@ class Filtro_Particulas_Sakldmcl
 		double seq_laser_;
 		double seq_laser_ant_;
 		int r_bag_;
+		double time_conv_;
+		int iteration_;
 
 		double weight_all_laserbeam_;
 
@@ -246,6 +253,7 @@ class Filtro_Particulas_Sakldmcl
 		double pool_[10000];
 		double weight_ord_[10000];
 		double max_w_;
+		double max_w_before_norm_;
 		double media_pesos_;
 
 		bool free_ok_;
@@ -261,6 +269,12 @@ class Filtro_Particulas_Sakldmcl
 		bool zerar_time_ok_;
 		bool reduziu_num_part_;
 		bool kidnapping_ok_;
+		bool desabilita_kld_;
+		bool desabilita_samcl_;
+		bool desabilita_vary_sample_;
+		bool desabilita_kid_;
+		bool out_;
+		bool calc_new_num_particles_;
 };
 
 #endif

@@ -1,6 +1,6 @@
 #include "filtro_particulas_sakldmcl.h"
 
-Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfile_("/home/au/catkin_ws/dados_sakldmcl.txt",ofstream::app)
+Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfile_("/home/au/catkin_ws/NOVO_50_DESVIO_KID_dados_SA-KLD_SAMCL_KLD.csv",ofstream::app)
 {
 	n_ = n;
 
@@ -18,16 +18,23 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 //--------------------------------------------------------------------------------//
 	freq_ = 30.0;
 
+	desabilita_kld_ = false;
+	desabilita_samcl_ = false;
+	desabilita_vary_sample_ = false;
+	desabilita_kid_ = false;
+
 	pos_amostra_ = 0;
 	num_bag_amostras_ = 0;
-	qtdd_amostras_ = 20;
+	qtdd_amostras_ = 50;
 	seq_laser_ant_ = 1000;
 	r_bag_ = 3;
+	bins_ = 2;
+	iteration_ = 0;
 
 	num_part_local_ = 0;
 
-	max_part_ = 2500;
-	min_part_ = 100;
+	max_part_ = 7500;
+	min_part_ = 500;
  	qtdd_laser_ = 30; //quantidade de pontos do laser que serão lidos
 	qtdd_orient_ = 18; //quantidade de giros no mesmo pose. Atentar-se ao numero de free_xy. qtdd_orient*free_xy < 100mil
 	range_max_fakelaser = 10; //5.6; //[m]
@@ -41,20 +48,21 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	//parâmetro para convergir
 
 	error_particles_ = 0.14; //0.45 ~ dist de 0.3m da particula (na media) ; 0.28 ~ 0.2m; 0.14 ~ 0.1m
-	dist_threshold_ = 0.5; //todas as partículas deverão estar até 0.5m em ambos os eixos para que seja considerado convergido
 
 	//parâmetros para SAMCL
 
-	ser_threshold_ = 0.024; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
-	weight_threshold_ = 0.0030; //--> 5000 part //0.0015 -> 0.10 //Quanto maior o num_part_ maior deverá ser o weight_threshold
-	alpha_sample_set_ = 0.4; //60% local e 40% global
+	//ser_threshold_ = 0.024; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
+	ser_threshold_ = 0.020;
+	//weight_threshold_ = 0.0030; //--> 5000 part //0.0015 -> 0.10 //Quanto maior o num_part_ maior deverá ser o weight_threshold
+	weight_threshold_ = 0.05;
+	alpha_sample_set_ = 0.6; //60% local e 40% global
 	fator_part_threshold_ = 10000;//3 //10000 -> desabilita
 
 	num_min_part_ = 10000;
 
 	//parâmetros para KLD
-	kld_err_ = 0.020; //0.020//quanto maior o erro, menor o número de partículas por k_bins
-	kld_z_ = 3; //upper 1 − δ quantile of the standard normal distribution -> usar tabela de quantil
+	kld_err_ = 0.010; //quanto maior o erro, menor o número de partículas por k_bins
+	kld_z_ = 2.33; // p-value = P(Z>2.33) = 1 - P(Z>2.33) = 1-0.9901 = 0.0099 //upper 1 − δ quantile of the standard normal distribution -> usar tabela de quantil
 
 
 //--------------------------------------------------------------------------------//
@@ -110,7 +118,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	total = 0;
 	probt = 0;
 	passo = 0;
-	sum = 0;
+	sum = 1000;
 	index_max_w_ = 0;
 
 	rand_xy = 0;
@@ -122,6 +130,8 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	xi = 0;
 	yi = 0;
 	i = 0;
+
+	time_conv_ = 0;
 
 	occ_ok_ = false;
 	odom_ok_ = false;
@@ -137,7 +147,8 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	abriu_txt_ok_ = false;
 	zerar_time_ok_ = false;
 	kidnapping_ok_ = false;
-
+	out_ = false;
+	calc_new_num_particles_ = true;
 }
 
 Filtro_Particulas_Sakldmcl::~Filtro_Particulas_Sakldmcl()
@@ -201,12 +212,13 @@ void Filtro_Particulas_Sakldmcl::free_coordxyCallback (const std_msgs::Int32Mult
 
 void Filtro_Particulas_Sakldmcl::laserCallback (const sensor_msgs::LaserScanConstPtr& scan)
 {
+//-------sempre que o bag der um novo loop--------------------------------------------------//
 	seq_laser_ = scan->header.seq;
 	if(seq_laser_ > seq_laser_ant_)
 	{
 		seq_laser_ant_ = seq_laser_;
 	}
-	else
+	else if(num_bag_amostras_ >= 0)
 	{
 		cout<<"time_bag_final: "<<time_bag_dif.toSec()<<endl;
 		seq_laser_ant_ = 0;
@@ -216,8 +228,14 @@ void Filtro_Particulas_Sakldmcl::laserCallback (const sensor_msgs::LaserScanCons
 		create_particle_ok_ = true;
 		zerar_deltas_ = false;
 		time_converged_ok_ = false;
-		num_part_ = max_part_;
+		pos_amostra_ = 0;
+		if(desabilita_vary_sample_ == false)
+		{
+			calc_new_num_particles_ = true;
+		}else num_part_ = max_part_;
+		iteration_ = 0;
 	}
+//---------------------------------------------------------//
 
 	if(pos_amostra_ == 0) pos_amostra_ = 1;
 
@@ -260,15 +278,99 @@ void Filtro_Particulas_Sakldmcl::odomCallback (const nav_msgs::OdometryConstPtr&
 	odom_ok_ = true;
 }
 
+void Filtro_Particulas_Sakldmcl::calculoNumKBinsForCreateParticles()
+{
+	//Método para carregar o vetor_pose_xy_bins_[] com as células intervaladas a cada bin.
+	//zerar o vetor
+	for(int j = 0 ; j < 10000 ; j++)
+	{
+		vetor_pose_xy_bins_[j] = 0;
+	}
+
+	k_bins_ = 0;
+
+	int pose_x_pixel = 0;
+	int pose_y_pixel = 0;
+
+	int celula_pose_x = 0;
+	int celula_pose_y = 0;
+
+	for(int i = 0 ; i < num_particulas_SER_ ; i++)
+	{
+		//pose em pixels
+		pose_x_pixel = (grid_pose_energy_[grid_indice_sorted_[indice_busca_SER_[i]]].xy)/10000;
+		pose_y_pixel = (grid_pose_energy_[grid_indice_sorted_[indice_busca_SER_[i]]].xy)%10000;
+
+		//relacionar os poses com os bins
+		celula_pose_x = pose_x_pixel / bins_;
+		celula_pose_y = pose_y_pixel / bins_;
+
+		pose_xy_bins_ = (10000 * celula_pose_x) + celula_pose_y;
+
+		//busca o valor de pose_xy_bins_
+		buscaPosexyBins();
+		//se existir, não faz nada. Se não, adicionar no início do vetor vetor_pose_xy_bins_,
+		//incrementar o número de bins ocupados pelas partículas
+		//e ordenar este vetor
+		if(buscaPosexyBins() == false)
+		{
+			vetor_pose_xy_bins_[0] = pose_xy_bins_;
+			k_bins_++;
+			ordenaVetorPosexyBins();
+		}
+	}
+	calculoSampleSizeForCreateParticles(k_bins_);
+}
+void Filtro_Particulas_Sakldmcl::calculoSampleSizeForCreateParticles(int k)
+{
+	double a, b, c, x;
+	int n;
+
+	if (k <= 1)
+	{
+		//ROS_INFO("k: %d !!! Não devia...", k);
+	}
+	//Cálculo do número de partículas utilizando a equação de KL-Distance
+	else
+	{
+		a = 1;
+		b = 2 / (9 * ((double) k - 1));
+		c = sqrt(2 / (9 * ((double) k - 1))) * kld_z_;
+		x = a - b + c;
+
+		n = (int) ceil((k - 1) / (2 * kld_err_) * x * x * x);
+
+		if (n < min_part_)
+		{
+			num_part_ = min_part_;
+		}
+		else if (n > max_part_)
+		{
+			num_part_ = max_part_;
+		}
+		else
+		{
+			num_part_ = n;
+		}
+		cout<<"Para CREATE PARTICLES: Num_part_KLD: "<<n<<" | num_SER: "<<num_particulas_SER_<<" | k_bins_: "<<k_bins_<<" | bins: "<<bins_<<" | kld_err: "<<kld_err_<<" | kld_z: "<<kld_z_<<endl;
+		//printf("Number_Particle: %d | k_bins: %d | bins: %d | max_weight: %f | num_min_part: %d \n", num_part_, k_bins_, bins_,max_w_, num_min_part_);
+
+		myfile_<<"Num_part_KLD: "<<n<<","<<"num_SER: "<<num_particulas_SER_<<","<<"k_bins_: "<<k_bins_<<","<<"bins: "<<bins_<<","<<"kld_err: "<<kld_err_<<","<<"kld_z: "<<kld_z_<<",";
+
+	}
+	calc_new_num_particles_ = false;
+}
+
+
 void Filtro_Particulas_Sakldmcl::createParticles()
 {
 	//Criando partículas randômicas.
 
 	//mudando a semente do random
-	if(create_particle_ok_ == true)
+	if(create_particle_ok_ == true && calc_new_num_particles_ == false)
 	{
 		cout<<"Particles Created!!!!!"<<endl;
-		//cout<<"Local_Particles: "<<num_part_local_<<" | Global_Particles: "<<num_part_global_<<" | Total_Particles: "<<num_part_<<endl;
+		cout<<"Local_Particles: "<<num_part_local_<<" | Global_Particles: "<<num_part_global_<<" | Total_Particles: "<<num_part_<<endl;
 		srand(time(NULL));
 
 		rand_xy = 0;
@@ -277,21 +379,40 @@ void Filtro_Particulas_Sakldmcl::createParticles()
 
 		for (int i = num_part_local_; i < num_part_; i++)
 		{
-			rand_xy = rand() % num_particulas_SER_; //random de 0 a num_particulas_SER_
+			if(desabilita_samcl_ == true)
+			{
+				rand_xy = rand() % num_free_; //random de 0 a num_free_
 
-			pose_x = (grid_pose_energy_[grid_indice_sorted_[indice_busca_SER_[rand_xy]]].xy)/10000; //separa x de y
-			pose_y = (grid_pose_energy_[grid_indice_sorted_[indice_busca_SER_[rand_xy]]].xy)%10000;
+				pose_x = (free_xy_[rand_xy])/10000; //separa x de y
+				pose_y = (free_xy_[rand_xy])%10000;
 
-			single_pose_.x = pose_x * res_; //1 pixel -> 0.05m
-			single_pose_.y = pose_y * res_;
-			single_pose_.theta = (rand() % 360 + 0) - 180; //em graus
-			single_pose_.theta = single_pose_.theta * M_PI / 180; //em radianos
+				single_pose_.x = pose_x * res_; //1 pixel -> 0.05m
+				single_pose_.y = pose_y * res_;
+				single_pose_.theta = (rand() % 360 + 0) - 180; //em graus
+				single_pose_.theta = single_pose_.theta * M_PI / 180; //em radianos
 
-			particle_pose_[i] = single_pose_;
+				particle_pose_[i] = single_pose_;
+			}else
+			{
+				rand_xy = rand() % num_particulas_SER_; //random de 0 a num_particulas_SER_
+
+				pose_x = (grid_pose_energy_[grid_indice_sorted_[indice_busca_SER_[rand_xy]]].xy)/10000; //separa x de y
+				pose_y = (grid_pose_energy_[grid_indice_sorted_[indice_busca_SER_[rand_xy]]].xy)%10000;
+
+				single_pose_.x = pose_x * res_; //1 pixel -> 0.05m
+				single_pose_.y = pose_y * res_;
+				single_pose_.theta = (rand() % 360 + 0) - 180; //em graus
+				single_pose_.theta = single_pose_.theta * M_PI / 180; //em radianos
+
+				particle_pose_[i] = single_pose_;
+			}
 		}
 		cloud();
 		prim_converg_ = false;
 		create_particle_ok_ = false;
+		sum = 1000;
+		kidnapping_ok_ = false;
+		//busca_energia_SER_ok_ = false;
 	}
 }
 
@@ -329,6 +450,7 @@ void Filtro_Particulas_Sakldmcl::fakeLaser()
 	num_laser = 0;
 	achou = 0;
 	total = 0;
+	max_w_before_norm_ = -1;
 
 	for (int i = 0; i < num_part_; i++)
 	{
@@ -384,6 +506,11 @@ void Filtro_Particulas_Sakldmcl::fakeLaser()
 		weight_part_[i] = probt;
 
 		total += weight_part_[i];
+
+		if(weight_part_[i] > max_w_before_norm_)
+		{
+			max_w_before_norm_ = weight_part_[i];
+		}
 	}
 }
 
@@ -491,14 +618,19 @@ void Filtro_Particulas_Sakldmcl::moveParticles()
 		fakeLaser();
 		resample();
 		pubInicialPose();
-		if(max_part_ > 2500 || (prim_converg_ == true && max_part_ <= 2500))
+		if(desabilita_kld_ == false)
 		{
-			calculoNumKBins();
-				//caso queira desabilitar o KLD
-				//k_bins_ = 0;
-			calculoSampleSize(k_bins_);
+			if(desabilita_samcl_ == true)
+			{
+				calculoNumKBins();
+				calculoSampleSize(k_bins_);
+			}else //if( (max_part_ > 2500) || ((sum < 2*error_particles_) && max_part_ <= 2500) )
+			{
+				calculoNumKBins();
+				calculoSampleSize(k_bins_);
+			}
 		}
-		cout<<"Num_part: "<<num_part_<<endl;
+		//cout<<"Num_part: "<<num_part_<<endl;
 	}
 }
 
@@ -558,6 +690,16 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 	}
 	sum = sum / num_part_;
 
+	initial_pose_out_.x = xmedia;
+	initial_pose_out_.y = ymedia;
+	initial_pose_out_.theta = thetamedia;
+
+	if((1.35 - pose_out_msg.poses[0].position.x < 0 || 1.35 - pose_out_msg.poses[0].position.x > 7.5 || 1.75 - pose_out_msg.poses[0].position.y < 0 || 1.75 - pose_out_msg.poses[0].position.y > 4))
+	{
+		//cout<<"x: "<<1.35 - pose_out_msg.poses[0].position.x<<" | y: "<<1.75 - pose_out_msg.poses[0].position.y<<endl;
+		out_ = true;
+	}
+
 	if(sum < error_particles_)
 	{
 		//Para publicar o pose médio.
@@ -573,25 +715,23 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 			time_converged_sec_ = ros::Time::now();
 			time_to_converge_sec_ = time_converged_sec_ - time_bag_inicio;
 
-			double t = time_to_converge_sec_.toSec();
+			time_conv_ = time_to_converge_sec_.toSec();
 
-			num_bag_amostras_++;
-			myfile_<<t<<endl;
+			//num_bag_amostras_++;
+			//myfile_<<t<<endl;
 
-			//myfile_<<t<<",";
+			myfile_<<"time: "<<time_conv_<<",";
 
-			cout<<"time_to_Converge: "<<t<<endl;
+			//x = 1.30 - pose_curr_msg.poses[0].position.x;
+			//y = 1.70 - pose_curr_msg.poses[0].position.y;
+			//myfile_<<x<<","<<y<<",";
+
+			cout<<"time_to_Converge: "<<time_conv_<<endl;
 		}
 
-		visualizationMarker();
+		//visualizationMarker();
 
 		prim_converg_ = true;
-
-		if(1.35 - pose_curr_msg.poses[0].position.x < 0 || 1.75 - pose_curr_msg.poses[0].position.y < 0)
-		{
-			kidnapping_ok_ = true;
-			kidnapping();
-		}
 	}
 }
 
@@ -617,6 +757,13 @@ void Filtro_Particulas_Sakldmcl::cloud()
 				tf::Vector3(initial_pose2_.x + map_position_x_, initial_pose2_.y + map_position_y_, 0)),pose_curr_msg.poses[0]);
 
 	particle_curr_pose_pub_.publish(pose_curr_msg);
+
+	pose_out_msg.header.stamp = ros::Time::now();
+	pose_out_msg.header.frame_id = "map";
+	pose_out_msg.poses.resize(1);
+	tf::poseTFToMsg(tf::Pose(tf::createQuaternionFromYaw(initial_pose_out_.theta),
+				tf::Vector3(initial_pose_out_.x + map_position_x_, initial_pose_out_.y + map_position_y_, 0)),pose_out_msg.poses[0]);
+
 }
 
 void Filtro_Particulas_Sakldmcl::visualizationMarker()
@@ -844,7 +991,6 @@ void Filtro_Particulas_Sakldmcl::calculoSER()
 	{
 		calculo_SER_loop_ = false;
 		laser_data_energy_ = 0.0;
-		int valores_nao_validos = 0;
 
 		for (int laser_num = 0 ; laser_num < qtdd_laser_ ; laser_num++)
 		{
@@ -985,6 +1131,7 @@ void Filtro_Particulas_Sakldmcl::calculoSampleSize(int k)
 		{
 			num_part_ = n;
 		}
+		cout<<"Num_max_part: "<<max_part_<<" | Num_Part: "<<num_part_<<" | k_bins_: "<<k_bins_<<" | bins: "<<bins_<<" | kld_err: "<<kld_err_<<" | kld_z: "<<kld_z_<<endl;
 		//printf("Number_Particle: %d | k_bins: %d | bins: %d | max_weight: %f | num_min_part: %d \n", num_part_, k_bins_, bins_,max_w_, num_min_part_);
 	}
 	if(num_part_ > num_part_ant)
@@ -999,7 +1146,7 @@ void Filtro_Particulas_Sakldmcl::calculoSampleSize(int k)
 			particle_pose_[i].theta = particle_pose_[rand_indice].theta + gaussian(0.0, (3*turn_noise_));
 		}
 	}
-	if(num_part_ < 500)
+	if(num_part_ < 1000)
 		reduziu_num_part_ = true;
 }
 
@@ -1088,20 +1235,27 @@ void Filtro_Particulas_Sakldmcl::merge (int vector[], const int low, const int m
 
 void Filtro_Particulas_Sakldmcl::kidnapping()
 {
-	if(kidnapping_ok_ == true)
+	if(kidnapping_ok_ == true && desabilita_kid_ == false)
 	{
 		//habilita o espalhamento das partículas
 		//cout<<"P_Local_: "<<num_part_local_<<" | P_Global_: "<<num_part_global_<<" | P_Total: "<<num_part_<<endl;
 		//se peso máximo for menor que threshold, divide o sample set e habilita o cálculo de SER (compara fake_laser e real laser)
-		num_part_local_ = alpha_sample_set_ * max_part_;
-		num_part_global_ = max_part_ - num_part_local_;
-		num_part_ = max_part_;
+
+		if(desabilita_vary_sample_ == true)
+		{
+			num_part_local_ = alpha_sample_set_ * max_part_;
+			num_part_global_ = max_part_ - num_part_local_;
+			num_part_ = max_part_;
+		}
+
 		ROS_INFO("KIDNAPPING!!!!!");
+		cout<<"weight: "<<max_w_before_norm_<<endl;
 		calculo_SER_ok_ = false;
 		busca_energia_SER_ok_ = false;
 		reduziu_num_part_ = false;
 		create_particle_ok_ = true;
-		kidnapping_ok_ = false;
+		out_ = false;
+		calc_new_num_particles_ = true;
 	}
 }
 
@@ -1112,16 +1266,24 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 		cout<<"Nao conseguiu abrir dados.txt!!!"<<endl;
 		create_particle_ok_ = false;
 		zerar_deltas_ = false;
-	}
+	}else iteration_++;
 
 	time_bag_curr = ros::Time::now();
 	time_bag_dif = time_bag_curr - time_bag_inicio;
-/*
+
 	double x, y;
 
 	//cout<<"time_bag_dif: "<<time_bag_dif<<endl;
 
-	if(time_bag_dif.toSec() > 129.35/r_bag_ && time_bag_dif.toSec() < 132/r_bag_ && pos_amostra_ == 1)
+/*	//Cada if abaixo grava o pose de cada posição desejada (no caso, 5 posições)
+	if(time_bag_dif.toSec() > 20/r_bag_ && time_bag_dif.toSec() < 22/r_bag_ && pos_amostra_ == 1)
+	{
+		x = 1.30 - pose_curr_msg.poses[0].position.x;
+		y = 1.70 - pose_curr_msg.poses[0].position.y;
+		myfile_<<x<<","<<y<<",";
+		pos_amostra_++;
+	}
+	if(time_bag_dif.toSec() > 129.35/r_bag_ && time_bag_dif.toSec() < 132/r_bag_ && pos_amostra_ == 2)
 	{
 		//cout<<"x: "<<x<<" | pose_curr_msg.poses[0].position.x: "<<pose_curr_msg.poses[0].position.x<<endl;
 		cout<<"time_bag_diff_1: "<<time_bag_dif.toSec()<<endl;
@@ -1130,7 +1292,7 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 		myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 147.5/r_bag_ && time_bag_dif.toSec() < 150/r_bag_ && pos_amostra_ == 2)
+	if(time_bag_dif.toSec() > 147.5/r_bag_ && time_bag_dif.toSec() < 150/r_bag_ && pos_amostra_ == 3)
 	{
 		cout<<"time_bag_diff_2: "<<time_bag_dif.toSec()<<endl;
 		x = 1.30 - pose_curr_msg.poses[0].position.x;
@@ -1138,7 +1300,7 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 		myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 169.2/r_bag_ && time_bag_dif.toSec() < 175/r_bag_ && pos_amostra_ == 3)
+	if(time_bag_dif.toSec() > 169.2/r_bag_ && time_bag_dif.toSec() < 175/r_bag_ && pos_amostra_ == 4)
 	{
 		cout<<"time_bag_diff_3: "<<time_bag_dif.toSec()<<endl;
 		x = 1.30 - pose_curr_msg.poses[0].position.x;
@@ -1146,7 +1308,7 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 		myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 200.4/r_bag_ && time_bag_dif.toSec() < 205/r_bag_ && pos_amostra_ == 4)
+	if(time_bag_dif.toSec() > 200.4/r_bag_ && time_bag_dif.toSec() < 205/r_bag_ && pos_amostra_ == 5)
 	{
 		cout<<"time_bag_diff_4: "<<time_bag_dif.toSec()<<endl;
 		x = 1.30 - pose_curr_msg.poses[0].position.x;
@@ -1154,30 +1316,83 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 		myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 222/r_bag_ && time_bag_dif.toSec() < 232/r_bag_ && pos_amostra_ == 5)
+	if(time_bag_dif.toSec() > 222/r_bag_ && time_bag_dif.toSec() < 232/r_bag_ && pos_amostra_ == 6)
 	{
 		cout<<"time_bag_diff_5: "<<time_bag_dif.toSec()<<endl;
 		x = 1.30 - pose_curr_msg.poses[0].position.x;
 		y = 1.70 - pose_curr_msg.poses[0].position.y;
 		myfile_<<x<<","<<y<<endl;
-		pos_amostra_ = 1;
+		pos_amostra_++;
 		num_bag_amostras_++;
-		//bag_.close();
 	}
 */
-	if(num_bag_amostras_ > qtdd_amostras_)
+
+	//Apenas para 1 posição. No caso foi usado para saber se o filtro convergiu errado ou não.
+	//hall: 100
+	//corner: 65
+	if(time_bag_dif.toSec() > 222/r_bag_ && time_bag_dif.toSec() < 232/r_bag_ && pos_amostra_ == 1)// && time_converged_ok_ == true)
 	{
-		myfile_.close();
+		//cout<<"x: "<<x<<" | pose_curr_msg.poses[0].position.x: "<<pose_curr_msg.poses[0].position.x<<endl;
+		cout<<"time_bag_diff_1: "<<time_bag_dif.toSec()<<endl;
+		x = 1.30 - pose_curr_msg.poses[0].position.x;
+		y = 1.70 - pose_curr_msg.poses[0].position.y;
+		myfile_<<x<<","<<y<<",iteration,"<<iteration_<<endl;
+		pos_amostra_++;
+		num_bag_amostras_++;
 	}
-/*
-	if(time_bag_dif.toSec() >= 232.824)
+
+/*	if(num_bag_amostras_ >= qtdd_amostras_)
 	{
-		cout<<"time_bag_final: "<<time_bag_dif.toSec()<<endl;
-		create_particle_ok_ = true;
-		zerar_deltas_ = false;
-		zerar_time_ok_ = false;
+		if(max_part_ == 1000)
+		{
+			max_part_ = 2500;
+		}else
+		{
+			max_part_ += 2500;
+		}
+
+		if(max_part_ > 7500)
+		{
+			if(desabilita_kld_ == false && desabilita_samcl_ == true)
+			{
+				myfile_.close();
+				num_bag_amostras_ = -1;
+			}
+			if(desabilita_kld_ == true && desabilita_samcl_ == false)
+			{
+				//habilita KLD
+				desabilita_kld_ = false;
+				desabilita_samcl_ = true;
+				max_part_ = 1000;
+				ROS_INFO("INICIANDO/HABILITANDO KLD");
+			}
+			//se SA-KLD estiver habilitado,
+			if(desabilita_kld_ == false && desabilita_samcl_ == false)
+			{
+				//habilita SAMCL
+				desabilita_kld_ = true;
+				max_part_ = 1000;
+				ROS_INFO("INICIANDO/HABILITANDO SAMCL");
+			}
+		}
+		num_bag_amostras_ = 0;
 	}
 */
+	//Para testar localização global de 500 a 9500 particulas
+	if(num_bag_amostras_ >= qtdd_amostras_)
+	{
+		if(desabilita_kid_ == true)
+		{
+			desabilita_kid_ = false;
+			num_bag_amostras_ = 0;
+
+		}else
+		{
+			myfile_.close();
+			num_bag_amostras_ = -1;
+		}
+	}
+	//cout<<"desabilita_kid: "<<desabilita_kid_<<endl;
 }
 
 void Filtro_Particulas_Sakldmcl::spin()
@@ -1224,38 +1439,62 @@ void Filtro_Particulas_Sakldmcl::spin()
 
 				cout<<"Grids created. Time: "<<delta_t<<endl;
 				//no início de tudo: num_part_ = max_part_
-				num_part_ = max_part_;
+				if(desabilita_vary_sample_ == true)
+				{
+					num_part_ = max_part_;
+					calc_new_num_particles_ = false;
+				}
 
 			}else if(grids_ok_ == true && odom_ok_ == true && laser_ok_ == true )
 			{
+				if(calc_new_num_particles_ == true)
+				{
+					calculo_SER_ok_ = false;
+					busca_energia_SER_ok_ = false;
+				}
+				calculoSER();
+				if(calculo_SER_ok_ == true) buscaEnergiaSER();
+				if(busca_energia_SER_ok_ == false) calculo_SER_ok_ = false;
+
+				if(desabilita_vary_sample_ == false && calc_new_num_particles_ == true && busca_energia_SER_ok_ == true) //num_particulas_SER_ != 0
+				{
+					calculoNumKBinsForCreateParticles();
+					if(kidnapping_ok_ == true)
+					{
+						num_part_local_ = alpha_sample_set_ * num_part_;
+						num_part_global_ = num_part_ - num_part_local_;
+					}
+				}
+
 				//cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
+				//cout<<"max_w_before: "<<max_w_before_norm_<<" | weight_threshold: "<<weight_threshold_<<endl;
 
 				//haverá espalhamento de partículas se o peso máximo for menor que o threshold ou o número de partículas
 				//aumentarem em função do fator_part_threshold. E, também, somente após a primeira convergência
 				//se peso máximo for menor que threshold, divide o sample set e habilita o cálculo de SER (compara fake_laser e real laser)
-				int arredondamento = fator_part_threshold_ * num_min_part_;
-				if((max_w_ < weight_threshold_ || num_part_ > arredondamento) && prim_converg_ == true && reduziu_num_part_ == true)
+				//if((max_w_ < weight_threshold_ || num_part_ > arredondamento) && prim_converg_ == true && reduziu_num_part_ == true)
+				if(((max_w_before_norm_ < weight_threshold_) && prim_converg_ == true) || out_ == true)
 				{
-					cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
-					kidnapping_ok_ = true;
-					kidnapping();
+					if(desabilita_samcl_ == false && desabilita_kld_ == true)
+					{
+						kidnapping_ok_ = true;
+						kidnapping();
+					}
+					if(desabilita_samcl_ == false && desabilita_kld_ == false && reduziu_num_part_ == true)
+					{
+						kidnapping_ok_ = true;
+						kidnapping();
+					}
+					//cout<<"max_w: "<<max_w_<<" | weight_threshold: "<<weight_threshold_<<endl;
 
-				}else
+				}else if(kidnapping_ok_ == false)
 				{
 					num_part_local_ = num_part_;
 					num_part_global_ = num_part_ - num_part_local_;
 				}
-				calculoSER();
-				if(calculo_SER_ok_ == true) buscaEnergiaSER();
 
-				if(busca_energia_SER_ok_ == false)
-					calculo_SER_ok_ = false;
-				else
+				if(busca_energia_SER_ok_ == true)
 				{
-					if(create_particle_ok_ == true)
-					{
-						bins_ = 8 - (res_/0.05); //12 - (2 * (res_/0.05)); //método empírico kkkk
-					}
 					if(zerar_deltas_ == false){num_part_local_ = 0;}
 					createParticles();
 					escreveTxt();
