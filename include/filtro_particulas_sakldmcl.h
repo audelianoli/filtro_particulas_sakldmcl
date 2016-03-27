@@ -137,6 +137,8 @@ class Filtro_Particulas_Sakldmcl
 		double time_conv_;
 		int iteration_;
 
+		double sakld_err_;
+
 		double weight_all_laserbeam_;
 
 		double map_meta_data_;

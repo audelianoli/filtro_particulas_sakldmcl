@@ -1,6 +1,6 @@
 #include "filtro_particulas_sakldmcl.h"
 
-Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfile_("/home/au/catkin_ws/NOVO_50_DESVIO_KID_dados_SA-KLD_SAMCL_KLD.csv",ofstream::app)
+Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfile_("/home/au/catkin_ws/20_Movimento_dados_SA-KLD_full.csv",ofstream::app)
 {
 	n_ = n;
 
@@ -25,7 +25,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 
 	pos_amostra_ = 0;
 	num_bag_amostras_ = 0;
-	qtdd_amostras_ = 50;
+	qtdd_amostras_ = 20;
 	seq_laser_ant_ = 1000;
 	r_bag_ = 3;
 	bins_ = 2;
@@ -33,7 +33,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 
 	num_part_local_ = 0;
 
-	max_part_ = 7500;
+	max_part_ = 500;
 	min_part_ = 500;
  	qtdd_laser_ = 30; //quantidade de pontos do laser que serão lidos
 	qtdd_orient_ = 18; //quantidade de giros no mesmo pose. Atentar-se ao numero de free_xy. qtdd_orient*free_xy < 100mil
@@ -64,6 +64,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	kld_err_ = 0.010; //quanto maior o erro, menor o número de partículas por k_bins
 	kld_z_ = 2.33; // p-value = P(Z>2.33) = 1 - P(Z>2.33) = 1-0.9901 = 0.0099 //upper 1 − δ quantile of the standard normal distribution -> usar tabela de quantil
 
+	sakld_err_ = 0.015;
 
 //--------------------------------------------------------------------------------//
 
@@ -338,7 +339,7 @@ void Filtro_Particulas_Sakldmcl::calculoSampleSizeForCreateParticles(int k)
 		c = sqrt(2 / (9 * ((double) k - 1))) * kld_z_;
 		x = a - b + c;
 
-		n = (int) ceil((k - 1) / (2 * kld_err_) * x * x * x);
+		n = (int) ceil((k - 1) / (2 * sakld_err_) * x * x * x);
 
 		if (n < min_part_)
 		{
@@ -352,10 +353,10 @@ void Filtro_Particulas_Sakldmcl::calculoSampleSizeForCreateParticles(int k)
 		{
 			num_part_ = n;
 		}
-		cout<<"Para CREATE PARTICLES: Num_part_KLD: "<<n<<" | num_SER: "<<num_particulas_SER_<<" | k_bins_: "<<k_bins_<<" | bins: "<<bins_<<" | kld_err: "<<kld_err_<<" | kld_z: "<<kld_z_<<endl;
+		cout<<"Para CREATE PARTICLES: Num_part_KLD: "<<n<<" | num_SER: "<<num_particulas_SER_<<" | k_bins_: "<<k_bins_<<" | bins: "<<bins_<<" | sakld_err: "<<sakld_err_<<" | kld_z: "<<kld_z_<<endl;
 		//printf("Number_Particle: %d | k_bins: %d | bins: %d | max_weight: %f | num_min_part: %d \n", num_part_, k_bins_, bins_,max_w_, num_min_part_);
 
-		myfile_<<"Num_part_KLD: "<<n<<","<<"num_SER: "<<num_particulas_SER_<<","<<"k_bins_: "<<k_bins_<<","<<"bins: "<<bins_<<","<<"kld_err: "<<kld_err_<<","<<"kld_z: "<<kld_z_<<",";
+		myfile_<<"Num_part_KLD: "<<n<<","<<"num_SER: "<<num_particulas_SER_<<","<<"k_bins_: "<<k_bins_<<","<<"bins: "<<bins_<<","<<"sakld_err: "<<sakld_err_<<","<<"kld_z: "<<kld_z_<<",";
 
 	}
 	calc_new_num_particles_ = false;
@@ -1330,7 +1331,8 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 	//Apenas para 1 posição. No caso foi usado para saber se o filtro convergiu errado ou não.
 	//hall: 100
 	//corner: 65
-	if(time_bag_dif.toSec() > 222/r_bag_ && time_bag_dif.toSec() < 232/r_bag_ && pos_amostra_ == 1)// && time_converged_ok_ == true)
+	//movimento: 95
+	if(time_bag_dif.toSec() > 95/r_bag_ && time_bag_dif.toSec() < 98/r_bag_ && pos_amostra_ == 1)
 	{
 		//cout<<"x: "<<x<<" | pose_curr_msg.poses[0].position.x: "<<pose_curr_msg.poses[0].position.x<<endl;
 		cout<<"time_bag_diff_1: "<<time_bag_dif.toSec()<<endl;
@@ -1381,16 +1383,15 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 	//Para testar localização global de 500 a 9500 particulas
 	if(num_bag_amostras_ >= qtdd_amostras_)
 	{
-		if(desabilita_kid_ == true)
+		if(max_part_ < 9000)
 		{
-			desabilita_kid_ = false;
-			num_bag_amostras_ = 0;
-
+			max_part_ += 500;
 		}else
 		{
 			myfile_.close();
 			num_bag_amostras_ = -1;
 		}
+		num_bag_amostras_ = 0;
 	}
 	//cout<<"desabilita_kid: "<<desabilita_kid_<<endl;
 }
