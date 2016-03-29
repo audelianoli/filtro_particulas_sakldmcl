@@ -1,0 +1,28 @@
+<launch>
+
+	<node name="map_server" pkg="map_server" type="map_server" args="/home/au/catkin_ws/mapas/0.15/map.yaml"/>
+	<node pkg="rviz" type="rviz" name="rviz" args="-d /home/au/catkin_ws/rviz/3_filtros.rviz"/>
+	
+
+	<node pkg="filtro_particulas_sakldmcl" type="filtro_particulas_sakldmcl" name="filtro_particulas_sakldmcl_node">
+		<remap from="filterparticlepose" to="sakldmcl/filterparticlepose" />
+		<remap from="particlecloudAU" to="sakldmcl/particlecloudAU" />
+		<remap from="particle_curr_pose" to="sakldmcl/particle_curr_pose" />
+		<remap from="visualization_mcl_pose" to="sakldmcl/visualization_mcl_pose" />			
+	</node>
+
+	<node pkg="filtro_particulas_samcl" type="filtro_particulas_samcl" name="filtro_particulas_samcl_node">
+		<remap from="filterparticlepose" to="samcl/filterparticlepose" />
+		<remap from="particlecloudAU" to="samcl/particlecloudAU" />
+		<remap from="particle_curr_pose" to="samcl/particle_curr_pose" />
+		<remap from="visualization_mcl_pose" to="samcl/visualization_mcl_pose" />			
+	</node>
+
+	<node pkg="filtro_particulas_kld" type="filtro_particulas_kld" name="filtro_particulas_kld_node">
+		<remap from="filterparticlepose" to="kld/filterparticlepose" />
+		<remap from="particlecloudAU" to="kld/particlecloudAU" />
+		<remap from="particle_curr_pose" to="kld/particle_curr_pose" />
+		<remap from="visualization_mcl_pose" to="kld/visualization_mcl_pose" />			
+	</node>
+
+</launch>

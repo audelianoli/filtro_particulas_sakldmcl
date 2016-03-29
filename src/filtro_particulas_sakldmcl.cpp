@@ -1,6 +1,6 @@
 #include "filtro_particulas_sakldmcl.h"
 
-Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfile_("/home/au/catkin_ws/20_Movimento_dados_SA-KLD_full.csv",ofstream::app)
+Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfile_("/home/au/catkin_ws/Tempo_global_loc_20_HALL_5k_0.015_dados_SA-KLD_SAMCL_KLD_full.csv",ofstream::app)
 {
 	n_ = n;
 
@@ -21,7 +21,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	desabilita_kld_ = false;
 	desabilita_samcl_ = false;
 	desabilita_vary_sample_ = false;
-	desabilita_kid_ = false;
+	desabilita_kid_ = true;
 
 	pos_amostra_ = 0;
 	num_bag_amostras_ = 0;
@@ -33,8 +33,8 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 
 	num_part_local_ = 0;
 
-	max_part_ = 500;
-	min_part_ = 500;
+	max_part_ = 5000;
+	min_part_ = 200;
  	qtdd_laser_ = 30; //quantidade de pontos do laser que serão lidos
 	qtdd_orient_ = 18; //quantidade de giros no mesmo pose. Atentar-se ao numero de free_xy. qtdd_orient*free_xy < 100mil
 	range_max_fakelaser = 10; //5.6; //[m]
@@ -54,14 +54,14 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	//ser_threshold_ = 0.024; //diferença entre a energia virtual e a energia real. Quanto maior, mais células serão utilizadas quando forem criadas as partículas
 	ser_threshold_ = 0.020;
 	//weight_threshold_ = 0.0030; //--> 5000 part //0.0015 -> 0.10 //Quanto maior o num_part_ maior deverá ser o weight_threshold
-	weight_threshold_ = 0.05;
+	weight_threshold_ = 0.045; //0.05
 	alpha_sample_set_ = 0.6; //60% local e 40% global
 	fator_part_threshold_ = 10000;//3 //10000 -> desabilita
 
 	num_min_part_ = 10000;
 
 	//parâmetros para KLD
-	kld_err_ = 0.010; //quanto maior o erro, menor o número de partículas por k_bins
+	kld_err_ = 0.015; //quanto maior o erro, menor o número de partículas por k_bins
 	kld_z_ = 2.33; // p-value = P(Z>2.33) = 1 - P(Z>2.33) = 1-0.9901 = 0.0099 //upper 1 − δ quantile of the standard normal distribution -> usar tabela de quantil
 
 	sakld_err_ = 0.015;
@@ -1256,7 +1256,7 @@ void Filtro_Particulas_Sakldmcl::kidnapping()
 		reduziu_num_part_ = false;
 		create_particle_ok_ = true;
 		out_ = false;
-		calc_new_num_particles_ = true;
+		if(desabilita_vary_sample_ == false) calc_new_num_particles_ = true;
 	}
 }
 
@@ -1332,13 +1332,14 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 	//hall: 100
 	//corner: 65
 	//movimento: 95
-	if(time_bag_dif.toSec() > 95/r_bag_ && time_bag_dif.toSec() < 98/r_bag_ && pos_amostra_ == 1)
+	//desvio: 225
+	if(time_bag_dif.toSec() > 100/r_bag_ && time_bag_dif.toSec() < 103/r_bag_ && pos_amostra_ == 1)
 	{
 		//cout<<"x: "<<x<<" | pose_curr_msg.poses[0].position.x: "<<pose_curr_msg.poses[0].position.x<<endl;
 		cout<<"time_bag_diff_1: "<<time_bag_dif.toSec()<<endl;
 		x = 1.30 - pose_curr_msg.poses[0].position.x;
 		y = 1.70 - pose_curr_msg.poses[0].position.y;
-		myfile_<<x<<","<<y<<",iteration,"<<iteration_<<endl;
+		myfile_<<x<<","<<y<<",iteration,"<<iteration_<<",Num_Part,"<<num_part_<<endl;
 		pos_amostra_++;
 		num_bag_amostras_++;
 	}
@@ -1381,19 +1382,88 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 	}
 */
 	//Para testar localização global de 500 a 9500 particulas
-	if(num_bag_amostras_ >= qtdd_amostras_)
+/*	if(num_bag_amostras_ >= qtdd_amostras_)
 	{
-		if(max_part_ < 9000)
+		myfile_<<endl;
+		if(kld_err_ == 0.050)
 		{
-			max_part_ += 500;
-		}else
+			kld_err_ = 0.025;
+			sakld_err_ = 0.025;
+		}else if(kld_err_ == 0.025)
+		{
+			kld_err_ = 0.015;
+			sakld_err_ = 0.015;
+		}else if(kld_err_ == 0.015)
+		{
+			kld_err_ = 0.010;
+			sakld_err_ = 0.010;
+		}else if(kld_err_ == 0.010)
+		{
+			kld_err_ = 0.050;
+			sakld_err_ = 0.050;
+			if(max_part_ <= 9000)
+			{
+				max_part_ += 500;
+				myfile_<<"MAX_PART_: "<<max_part_<<endl;
+				myfile_<<endl;
+
+			}
+		}
+		if(max_part_ == 9500)
 		{
 			myfile_.close();
 			num_bag_amostras_ = -1;
 		}
 		num_bag_amostras_ = 0;
 	}
+*/
 	//cout<<"desabilita_kid: "<<desabilita_kid_<<endl;
+
+	if(num_bag_amostras_ >= qtdd_amostras_)
+	{
+		myfile_<<endl;
+
+		if(desabilita_kld_ == false && desabilita_samcl_ == true)
+		{
+			myfile_.close();
+			num_bag_amostras_ = -1;
+		}
+		if(desabilita_kld_ == true && desabilita_samcl_ == false)
+		{
+			if(desabilita_kid_ == false)
+			{
+					desabilita_kid_ = true;
+					//habilita KLD
+					desabilita_kld_ = false;
+					desabilita_samcl_ = true;
+					myfile_<<"HABILITA KLD"<<endl<<endl;
+			}else
+			{
+					myfile_<<"HABILITA KIDNAPPING"<<endl<<endl;
+					desabilita_kid_ = false;
+			}
+
+		}
+		//se SA-KLD estiver habilitado,
+		if(desabilita_kld_ == false && desabilita_samcl_ == false)
+		{
+			if(desabilita_kid_ == false)
+			{
+					desabilita_kid_ = true;
+					desabilita_vary_sample_ = true;
+					//habilita SAMCL
+					myfile_<<"HABILITA SAMCL"<<endl<<endl;
+					desabilita_kld_ = true;
+			}else
+			{
+					myfile_<<"HABILITA KIDNAPPING"<<endl<<endl;
+					desabilita_kid_ = false;
+			}
+
+		}
+
+		num_bag_amostras_ = 0;
+	}
 }
 
 void Filtro_Particulas_Sakldmcl::spin()
