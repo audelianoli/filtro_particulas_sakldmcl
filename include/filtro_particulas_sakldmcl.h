@@ -154,6 +154,7 @@ class Filtro_Particulas_Sakldmcl
 		ros::Duration time_to_converge_sec_;
 
 		int num_part_;
+		int num_part_fix_;
 		int qtdd_laser_;
 		int qtdd_orient_;
 		double passo_base;
@@ -277,6 +278,7 @@ class Filtro_Particulas_Sakldmcl
 		bool desabilita_kid_;
 		bool out_;
 		bool calc_new_num_particles_;
+
 };
 
 #endif
