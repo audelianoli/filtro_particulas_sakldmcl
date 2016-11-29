@@ -1,11 +1,8 @@
 #include "filtro_particulas_sakldmcl.h"
 
-Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfile_("/home/pionner/catkin_ws/SA-KLD.csv",ofstream::app)
+Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfile_("/home/au/catkin_ws/9000p_TesteT_Mobilesim_10x1s_Position_Tracking_5k_7_bins_dados_KLD_sem_KID.csv",ofstream::app){
 
 									//myfile_("/home/au/catkin_ws/AreaAberta_10_Tempo_global_5k_3_bins_dados_SA-KLD_SAMCL_KLDfull.csv",ofstream::app)
-
-{ 
-	n_ = n;
 
 	occ_coordxy_sub_ = n.subscribe("occ_coordxy", 10000, &Filtro_Particulas_Sakldmcl::occ_coordxyCallback, this);
 	free_coordxy_sub_ = n.subscribe("free_coordxy", 10000, &Filtro_Particulas_Sakldmcl::free_coordxyCallback, this);
@@ -22,22 +19,22 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	freq_ = 30.0;
 
 	desabilita_kld_ = false;
-	desabilita_samcl_ = false;
-	desabilita_vary_sample_ = false;
-	desabilita_kid_ = false;
+	desabilita_samcl_ = true;
+	desabilita_vary_sample_ = true;
+	desabilita_kid_ = true;
 
 	pos_amostra_ = 0;
 	num_bag_amostras_ = 0;
 	qtdd_amostras_ = 10;
 	seq_laser_ant_ = 1000;
-	r_bag_ = 3;
+	r_bag_ = 1;
 
 	iteration_ = 0;
 
 	num_part_local_ = 0;
 	num_min_part_ = 10000; //variável apenas para saber qual foi o menor valor dado ao num_part
 
-	max_part_ = 5000;
+	max_part_ = 9000;
 	min_part_ = 200;
  	qtdd_laser_ = 30; //quantidade de pontos do laser que serão lidos
 	qtdd_orient_ = 10;//18; //quantidade de giros no mesmo pose. Atentar-se ao numero de free_xy. qtdd_orient*free_xy < 100mil
@@ -67,7 +64,7 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 
 	sakld_err_ = 0.020; //0.050
 
-	bins_ = 2; //Aumentar o bin conforme ao aumento da dimensão do mapa
+	bins_ = 7; //Aumentar o bin conforme ao aumento da dimensão do mapa
 					//5 -> Sala
 					//2 -> Labirinto
 
@@ -116,13 +113,14 @@ Filtro_Particulas_Sakldmcl::Filtro_Particulas_Sakldmcl(ros::NodeHandle n) : myfi
 	pose.y = 0;
 	pose.theta = 0;
 
+
 	obstacle_finded_ = false;
 
 	size_occ_coordxy_ = 0;
 	obstacle_ = 0;
 	achou = 0;
 	loop = 0;
-	cont = 0;
+	contador = 15;
 	total = 0;
 	probt = 0;
 	passo = 0;
@@ -232,6 +230,7 @@ void Filtro_Particulas_Sakldmcl::laserCallback (const sensor_msgs::LaserScanCons
 		cout<<"time_bag_final: "<<time_bag_dif.toSec()<<endl;
 		seq_laser_ant_ = 0;
 		time_bag_inicio = ros::Time::now();
+		time_bag_dif_anterior = ros::Time::now() - ros::Time::now();
 		zerar_time_ok_ = true;
 		calculo_SER_ok_ = false;
 		create_particle_ok_ = true;
@@ -742,7 +741,7 @@ void Filtro_Particulas_Sakldmcl::pubInicialPose()
 			//num_bag_amostras_++;
 			//myfile_<<t<<endl;
 
-			//myfile_<<"time: "<<time_conv_<<",";
+			myfile_<<"timetimetimetime: "<<time_conv_<<endl;
 
 			//x = 1.30 - pose_curr_msg.poses[0].position.x;
 			//y = 1.70 - pose_curr_msg.poses[0].position.y;
@@ -1288,6 +1287,19 @@ void Filtro_Particulas_Sakldmcl::kidnapping()
 	}
 }
 
+void Filtro_Particulas_Sakldmcl::positiontracking()
+{
+	//offset do pose em relação ao mapa do mobilesim
+	double initial_pose_x = 22.002;
+	double initial_pose_y = -6.327;
+	double initial_theta = 0;
+
+	mobile_sim_current_pose_x_ = initial_pose_x + pose_x_;
+	mobile_sim_current_pose_y_ = initial_pose_y + pose_y_;
+	mobile_sim_current_theta_ = initial_theta + pose_theta_;
+
+}
+
 void Filtro_Particulas_Sakldmcl::escreveTxt()
 {
 	if(!myfile_.is_open())
@@ -1299,60 +1311,99 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 
 	time_bag_curr = ros::Time::now();
 	time_bag_dif = time_bag_curr - time_bag_inicio;
+
 	//myfile_<<",iteration,"<<iteration_<<",Num_Part,"<<num_part_<<",Time,"<<time_bag_dif<<endl;
 
-	double x, y;
+	double x, y, theta;
 
 	//myfile_<<"time,"<<time_bag_dif.toSec()<<",iteration,"<<iteration_<<",Num_Part,"<<num_part_<<endl;
 
 	//cout<<"time_bag_dif: "<<time_bag_dif<<endl;
+	//cout<<"x: "<< 14.05 + pose_curr_msg.poses[0].position.x<<" | y: "<< -5.38 + pose_curr_msg.poses[0].position.y<<endl;
 
-/*	//Cada if abaixo grava o pose de cada posição desejada (no caso, 5 posições)
-	if(time_bag_dif.toSec() > 20/r_bag_ && time_bag_dif.toSec() < 22/r_bag_ && pos_amostra_ == 1)
+	//Cada if abaixo grava o pose de cada posição desejada (no caso, 5 posições)
+	//Armazenar dados para o Position Tracking
+
+	//Posição para o mapa do labirinto: ( 1.30 ; 1.70 )
+	//Posição para o mapa do mobilesim ( 14.05 ; -5.38 ) //offset do pose em relação ao mapa do rviz
+
+	//Tempo para ambiente real: 20 129.35 147.5 169.2 200.4 222
+	//Tempo para ambiente simulado: 32 57 92 117 140
+	x = 14.05 + initial_pose_out_.x + map_position_x_;//14.05 + pose_curr_msg.poses[0].position.x;
+	y = -5.38 + initial_pose_out_.y + map_position_y_;//-5.38 + pose_curr_msg.poses[0].position.y;
+	theta = 0 + initial_pose_out_.theta;
+
+	if(time_bag_dif.toSec() - time_bag_dif_anterior.toSec() > 1)
 	{
-		x = 1.30 - pose_curr_msg.poses[0].position.x;
-		y = 1.70 - pose_curr_msg.poses[0].position.y;
-		myfile_<<x<<","<<y<<",";
+		time_bag_dif_anterior = time_bag_curr - time_bag_inicio;
+		//if(contador == 15){
+			myfile_<<"Time: "<<time_bag_dif.toSec()<<","<<x<<","<<y<<","<<theta<<","<<mobile_sim_current_pose_x_<<","<<mobile_sim_current_pose_y_<<","<<mobile_sim_current_theta_<<endl;
+			contador = 0;
+			if(time_bag_dif.toSec() > 67/r_bag_ && pos_amostra_ == 1)
+			{
+				pos_amostra_++;
+				num_bag_amostras_++;
+				if(num_bag_amostras_ > qtdd_amostras_)
+				{
+					myfile_.close();
+					n_.shutdown();
+				}
+			}
+	}
+
+		//}
+	//contador++;
+	//cout<<"x: "<< x<<" | y: "<< y<<" | theta: "<<theta<<endl;
+
+/*	if(time_bag_dif.toSec() > 20/r_bag_ && time_bag_dif.toSec() < 21/r_bag_ && pos_amostra_ == 1)
+	{
+		x = 14.05 + pose_curr_msg.poses[0].position.x;
+		double x2 = 14.05 + initial_pose2_.x;
+		y = -5.38 + pose_curr_msg.poses[0].position.y;
+		theta = 0 + initial_pose2_.theta;
+
+		//myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 129.35/r_bag_ && time_bag_dif.toSec() < 132/r_bag_ && pos_amostra_ == 2)
+
+	if(time_bag_dif.toSec() > 32/r_bag_ && time_bag_dif.toSec() < 33/r_bag_ && pos_amostra_ == 2)
 	{
 		//cout<<"x: "<<x<<" | pose_curr_msg.poses[0].position.x: "<<pose_curr_msg.poses[0].position.x<<endl;
 		cout<<"time_bag_diff_1: "<<time_bag_dif.toSec()<<endl;
-		x = 1.30 - pose_curr_msg.poses[0].position.x;
-		y = 1.70 - pose_curr_msg.poses[0].position.y;
+		x = 14.05 + pose_curr_msg.poses[0].position.x;
+		y = -5.38 + pose_curr_msg.poses[0].position.y;
 		myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 147.5/r_bag_ && time_bag_dif.toSec() < 150/r_bag_ && pos_amostra_ == 3)
+	if(time_bag_dif.toSec() > 57/r_bag_ && time_bag_dif.toSec() < 58/r_bag_ && pos_amostra_ == 3)
 	{
 		cout<<"time_bag_diff_2: "<<time_bag_dif.toSec()<<endl;
-		x = 1.30 - pose_curr_msg.poses[0].position.x;
-		y = 1.70 - pose_curr_msg.poses[0].position.y;
+		x = 14.05 + pose_curr_msg.poses[0].position.x;
+		y = -5.38 + pose_curr_msg.poses[0].position.y;
 		myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 169.2/r_bag_ && time_bag_dif.toSec() < 175/r_bag_ && pos_amostra_ == 4)
+	if(time_bag_dif.toSec() > 92/r_bag_ && time_bag_dif.toSec() < 93/r_bag_ && pos_amostra_ == 4)
 	{
 		cout<<"time_bag_diff_3: "<<time_bag_dif.toSec()<<endl;
-		x = 1.30 - pose_curr_msg.poses[0].position.x;
-		y = 1.70 - pose_curr_msg.poses[0].position.y;
+		x = 14.05 + pose_curr_msg.poses[0].position.x;
+		y = -5.38 + pose_curr_msg.poses[0].position.y;
 		myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 200.4/r_bag_ && time_bag_dif.toSec() < 205/r_bag_ && pos_amostra_ == 5)
+	if(time_bag_dif.toSec() > 117/r_bag_ && time_bag_dif.toSec() < 118/r_bag_ && pos_amostra_ == 5)
 	{
 		cout<<"time_bag_diff_4: "<<time_bag_dif.toSec()<<endl;
-		x = 1.30 - pose_curr_msg.poses[0].position.x;
-		y = 1.70 - pose_curr_msg.poses[0].position.y;
+		x = 14.05 + pose_curr_msg.poses[0].position.x;
+		y = -5.38 + pose_curr_msg.poses[0].position.y;
 		myfile_<<x<<","<<y<<",";
 		pos_amostra_++;
 	}
-	if(time_bag_dif.toSec() > 222/r_bag_ && time_bag_dif.toSec() < 232/r_bag_ && pos_amostra_ == 6)
+	if(time_bag_dif.toSec() > 140/r_bag_ && time_bag_dif.toSec() < 141/r_bag_ && pos_amostra_ == 6)
 	{
 		cout<<"time_bag_diff_5: "<<time_bag_dif.toSec()<<endl;
-		x = 1.30 - pose_curr_msg.poses[0].position.x;
-		y = 1.70 - pose_curr_msg.poses[0].position.y;
+		x = 14.05 + pose_curr_msg.poses[0].position.x;
+		y = -5.38 + pose_curr_msg.poses[0].position.y;
 		myfile_<<x<<","<<y<<endl;
 		pos_amostra_++;
 		num_bag_amostras_++;
@@ -1369,18 +1420,20 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 	//mapa_maior_3: 55
 	//sequestro: 120
 	//areaaberta: 45
-
+/*
 	if(time_bag_dif.toSec() > 45/r_bag_ && time_bag_dif.toSec() < 48/r_bag_ && pos_amostra_ == 1)
 	{
 		//cout<<"x: "<<x<<" | pose_curr_msg.poses[0].position.x: "<<pose_curr_msg.poses[0].position.x<<endl;
 		cout<<"time_bag_diff_1: "<<time_bag_dif.toSec()<<endl;
-		x = 1.30 - pose_curr_msg.poses[0].position.x;
-		y = 1.70 - pose_curr_msg.poses[0].position.y;
+		x = 14.05 - pose_curr_msg.poses[0].position.x;
+		y = -5.38 - pose_curr_msg.poses[0].position.y;
 		//myfile_<<x<<","<<y<<",iteration,"<<iteration_<<",Num_Part,"<<num_part_<<endl;
 		pos_amostra_++;
 		num_bag_amostras_++;
 	}
+*/
 
+/*
 	//Para comparar os 3 algoritmos com kidnapping
 		if(num_bag_amostras_ >= qtdd_amostras_)
 		{
@@ -1411,7 +1464,7 @@ void Filtro_Particulas_Sakldmcl::escreveTxt()
 			}
 			num_bag_amostras_ = 0;
 		}
-
+*/
 
 /*	//Para teste de GL para mapa maior
 	if(num_bag_amostras_ >= qtdd_amostras_)
@@ -1640,6 +1693,7 @@ void Filtro_Particulas_Sakldmcl::spin()
 				createGrids();
 				ros::Time fim = ros::Time::now();
 				ros::Duration delta_t = fim - inicio;
+				time_bag_dif_anterior = ros::Time::now() - ros::Time::now();
 
 				cout<<"Grids created. Time: "<<delta_t<<endl;
 				//no início de tudo: num_part_ = max_part_
@@ -1708,7 +1762,9 @@ void Filtro_Particulas_Sakldmcl::spin()
 				{
 					if(zerar_deltas_ == false){num_part_local_ = 0;}
 					createParticles();
-					//escreveTxt();
+
+					positiontracking();
+					escreveTxt();
 
 					if(create_particle_ok_ == false && zerar_deltas_ == false)
 					{

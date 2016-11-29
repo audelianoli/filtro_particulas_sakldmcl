@@ -86,6 +86,7 @@ class Filtro_Particulas_Sakldmcl
 		void calculoSampleSize(int k);
 		void escreveTxt();
 		void kidnapping();
+		void positiontracking();
 
 		void calculoNumKBinsForCreateParticles();
 		void calculoSampleSizeForCreateParticles(int k);
@@ -127,6 +128,7 @@ class Filtro_Particulas_Sakldmcl
 		ros::Time time_bag_inicio;
 		ros::Time time_bag_curr;
 		ros::Duration time_bag_dif;
+		ros::Duration time_bag_dif_anterior;
 		int pos_amostra_;
 		ofstream myfile_;
 		int num_bag_amostras_;
@@ -213,7 +215,7 @@ class Filtro_Particulas_Sakldmcl
 		int obstacle_;
 		int achou;
 		int loop;
-		int cont;
+		int contador;
 		double total;
 		double probt;
 		double probtg;
@@ -232,6 +234,10 @@ class Filtro_Particulas_Sakldmcl
 		int yi;
 		int i;
 		int num_laser;
+
+		double mobile_sim_current_pose_x_;
+		double mobile_sim_current_pose_y_;
+		double mobile_sim_current_theta_;
 
 		geometry_msgs::Pose2D delta_pose_;
 		geometry_msgs::Pose2D pose_anterior_;
